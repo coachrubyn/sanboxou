@@ -1,0 +1,481 @@
+{
+  "CB": {
+    "regular_stats": {
+      "defensive": [
+        "PD",
+        "QB HUR",
+        "SACKS",
+        "SOLO",
+        "TD",
+        "TFL",
+        "TOT"
+      ]
+    },
+    "advanced_stats": {}
+  },
+  "DB": {
+    "regular_stats": {
+      "defensive": [
+        "PD",
+        "QB HUR",
+        "SACKS",
+        "SOLO",
+        "TD",
+        "TFL",
+        "TOT"
+      ],
+      "fumbles": [
+        "FUM",
+        "LOST",
+        "REC"
+      ],
+      "interceptions": [
+        "AVG",
+        "INT",
+        "TD",
+        "YDS"
+      ],
+      "kickReturns": [
+        "AVG",
+        "LONG",
+        "NO",
+        "TD",
+        "YDS"
+      ],
+      "puntReturns": [
+        "AVG",
+        "LONG",
+        "NO",
+        "TD",
+        "YDS"
+      ],
+      "receiving": [
+        "LONG",
+        "REC",
+        "TD",
+        "YDS",
+        "YPR"
+      ]
+    },
+    "advanced_stats": {}
+  },
+  "DL": {
+    "regular_stats": {
+      "defensive": [
+        "PD",
+        "QB HUR",
+        "SACKS",
+        "SOLO",
+        "TD",
+        "TFL",
+        "TOT"
+      ],
+      "fumbles": [
+        "FUM",
+        "LOST",
+        "REC"
+      ]
+    },
+    "advanced_stats": {}
+  },
+  "LB": {
+    "regular_stats": {
+      "defensive": [
+        "PD",
+        "QB HUR",
+        "SACKS",
+        "SOLO",
+        "TD",
+        "TFL",
+        "TOT"
+      ],
+      "fumbles": [
+        "FUM",
+        "LOST",
+        "REC"
+      ],
+      "interceptions": [
+        "AVG",
+        "INT",
+        "TD",
+        "YDS"
+      ]
+    },
+    "advanced_stats": {}
+  },
+  "LS": {
+    "regular_stats": {
+      "defensive": [
+        "PD",
+        "QB HUR",
+        "SACKS",
+        "SOLO",
+        "TD",
+        "TFL",
+        "TOT"
+      ]
+    },
+    "advanced_stats": {}
+  },
+  "P": {
+    "regular_stats": {
+      "passing": [
+        "ATT",
+        "COMPLETIONS",
+        "INT",
+        "PCT",
+        "TD",
+        "YDS",
+        "YPA"
+      ],
+      "punting": [
+        "In 20",
+        "LONG",
+        "NO",
+        "TB",
+        "YDS",
+        "YPP"
+      ]
+    },
+    "advanced_stats": {}
+  },
+  "PK": {
+    "regular_stats": {
+      "defensive": [
+        "PD",
+        "QB HUR",
+        "SACKS",
+        "SOLO",
+        "TD",
+        "TFL",
+        "TOT"
+      ],
+      "kicking": [
+        "FGA",
+        "FGM",
+        "LONG",
+        "PCT",
+        "PTS",
+        "XPA",
+        "XPM"
+      ]
+    },
+    "advanced_stats": {}
+  },
+  "QB": {
+    "regular_stats": {
+      "fumbles": [
+        "FUM",
+        "LOST",
+        "REC"
+      ],
+      "passing": [
+        "ATT",
+        "COMPLETIONS",
+        "INT",
+        "PCT",
+        "TD",
+        "YDS",
+        "YPA"
+      ],
+      "punting": [
+        "In 20",
+        "LONG",
+        "NO",
+        "TB",
+        "YDS",
+        "YPP"
+      ],
+      "receiving": [
+        "LONG",
+        "REC",
+        "TD",
+        "YDS",
+        "YPR"
+      ],
+      "rushing": [
+        "CAR",
+        "LONG",
+        "TD",
+        "YDS",
+        "YPC"
+      ]
+    },
+    "advanced_stats": {
+      "usage": {
+        "available": true,
+        "player_count": 2,
+        "fields": [
+          "season",
+          "id",
+          "name",
+          "position",
+          "team",
+          "conference",
+          "usage"
+        ]
+      },
+      "ppa": {
+        "available": true,
+        "player_count": 2,
+        "fields": [
+          "season",
+          "id",
+          "name",
+          "position",
+          "team",
+          "conference",
+          "averagePPA",
+          "totalPPA"
+        ]
+      },
+      "adjusted_passing": {
+        "available": true,
+        "fields": [
+          "year",
+          "athleteId",
+          "athleteName",
+          "position",
+          "team",
+          "conference",
+          "wepa",
+          "plays"
+        ]
+      },
+      "adjusted_rushing": {
+        "available": true,
+        "fields": [
+          "year",
+          "athleteId",
+          "athleteName",
+          "position",
+          "team",
+          "conference",
+          "wepa",
+          "plays"
+        ]
+      }
+    }
+  },
+  "RB": {
+    "regular_stats": {
+      "fumbles": [
+        "FUM",
+        "LOST",
+        "REC"
+      ],
+      "kickReturns": [
+        "AVG",
+        "LONG",
+        "NO",
+        "TD",
+        "YDS"
+      ],
+      "passing": [
+        "ATT",
+        "COMPLETIONS",
+        "INT",
+        "PCT",
+        "TD",
+        "YDS",
+        "YPA"
+      ],
+      "receiving": [
+        "LONG",
+        "REC",
+        "TD",
+        "YDS",
+        "YPR"
+      ],
+      "rushing": [
+        "CAR",
+        "LONG",
+        "TD",
+        "YDS",
+        "YPC"
+      ]
+    },
+    "advanced_stats": {
+      "usage": {
+        "available": true,
+        "player_count": 6,
+        "fields": [
+          "season",
+          "id",
+          "name",
+          "position",
+          "team",
+          "conference",
+          "usage"
+        ]
+      },
+      "ppa": {
+        "available": true,
+        "player_count": 6,
+        "fields": [
+          "season",
+          "id",
+          "name",
+          "position",
+          "team",
+          "conference",
+          "averagePPA",
+          "totalPPA"
+        ]
+      },
+      "adjusted_rushing": {
+        "available": true,
+        "fields": [
+          "year",
+          "athleteId",
+          "athleteName",
+          "position",
+          "team",
+          "conference",
+          "wepa",
+          "plays"
+        ]
+      }
+    }
+  },
+  "TE": {
+    "regular_stats": {
+      "defensive": [
+        "PD",
+        "QB HUR",
+        "SACKS",
+        "SOLO",
+        "TD",
+        "TFL",
+        "TOT"
+      ],
+      "fumbles": [
+        "FUM",
+        "LOST",
+        "REC"
+      ],
+      "passing": [
+        "ATT",
+        "COMPLETIONS",
+        "INT",
+        "PCT",
+        "TD",
+        "YDS",
+        "YPA"
+      ],
+      "receiving": [
+        "LONG",
+        "REC",
+        "TD",
+        "YDS",
+        "YPR"
+      ],
+      "rushing": [
+        "CAR",
+        "LONG",
+        "TD",
+        "YDS",
+        "YPC"
+      ]
+    },
+    "advanced_stats": {
+      "usage": {
+        "available": true,
+        "player_count": 3,
+        "fields": [
+          "season",
+          "id",
+          "name",
+          "position",
+          "team",
+          "conference",
+          "usage"
+        ]
+      },
+      "ppa": {
+        "available": true,
+        "player_count": 3,
+        "fields": [
+          "season",
+          "id",
+          "name",
+          "position",
+          "team",
+          "conference",
+          "averagePPA",
+          "totalPPA"
+        ]
+      }
+    }
+  },
+  "WR": {
+    "regular_stats": {
+      "defensive": [
+        "PD",
+        "QB HUR",
+        "SACKS",
+        "SOLO",
+        "TD",
+        "TFL",
+        "TOT"
+      ],
+      "fumbles": [
+        "FUM",
+        "LOST",
+        "REC"
+      ],
+      "passing": [
+        "ATT",
+        "COMPLETIONS",
+        "INT",
+        "PCT",
+        "TD",
+        "YDS",
+        "YPA"
+      ],
+      "receiving": [
+        "LONG",
+        "REC",
+        "TD",
+        "YDS",
+        "YPR"
+      ],
+      "rushing": [
+        "CAR",
+        "LONG",
+        "TD",
+        "YDS",
+        "YPC"
+      ]
+    },
+    "advanced_stats": {
+      "usage": {
+        "available": true,
+        "player_count": 10,
+        "fields": [
+          "season",
+          "id",
+          "name",
+          "position",
+          "team",
+          "conference",
+          "usage"
+        ]
+      },
+      "ppa": {
+        "available": true,
+        "player_count": 10,
+        "fields": [
+          "season",
+          "id",
+          "name",
+          "position",
+          "team",
+          "conference",
+          "averagePPA",
+          "totalPPA"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,155 @@
+{
+  "offense": {
+    "WR-X": [
+      { "name": "Javonnie Gibson", "number": 11, "role": "Starter" },
+      { "name": "Keontez Lewis", "number": 9, "role": "Back-Up" },
+      { "name": "Ivan Carreon", "number": 82, "role": "Back-Up" },
+      { "name": "Manny Choice", "number": 21, "role": "Back-Up" }
+    ],
+    "WR-Z": [
+      { "name": "Deion Burks", "number": 4, "role": "Starter" },
+      { "name": "Jer'Michael Carter", "number": 84, "role": "Back-Up" },
+      { "name": "Elijah Thomas", "number": 14, "role": "Back-Up" },
+      { "name": "Josiah Martin", "number": 17, "role": "Back-Up" }
+    ],
+    "WR-H": [
+      { "name": "Isaiah Sategna III", "number": 5, "role": "Starter" },
+      { "name": "Jacob Jordan", "number": 88, "role": "Back-Up" },
+      { "name": "Zion Kearney", "number": 7, "role": "Back-Up" },
+      { "name": "Zion Ragins", "number": 13, "role": "Back-Up" }
+    ],
+    "LT": [
+      { "name": "Michael Fasusi", "number": 56, "role": "Starter" },
+      { "name": "Logan Howland", "number": 71, "role": "Back-Up" }
+    ],
+    "LG": [
+      { "name": "Eddy Pierre-Louis", "number": 55, "role": "Starter" },
+      { "name": "Heath Ozaeta", "number": 77, "role": "Back-Up" }
+    ],
+    "C": [
+      { "name": "Febechi Nwaiwu", "number": 54, "role": "Starter" },
+      { "name": "Gunnar Allen", "number": 57, "role": "Back-Up" },
+      { "name": "Owen Hollenbeck", "number": 68, "role": "Back-Up" }
+    ],
+    "RG": [
+      { "name": "Ryan Fodje", "number": 70, "role": "Starter" },
+      { "name": "Daniel Akinkunmi", "number": 75, "role": "Back-Up" }
+    ],
+    "RT": [
+      { "name": "Derek Simmons", "number": 66, "role": "Starter" },
+      { "name": "Luke Baklenko", "number": 78, "role": "Back-Up" },
+      { "name": "Jake Taylor", "number": 79, "role": "Back-Up" }
+    ],
+    "TE": [
+      { "name": "Jaren Kanak", "number": 12, "role": "Starter" },
+      { "name": "Kaden Helms", "number": 18, "role": "Back-Up" },
+      { "name": "Carson Kent", "number": 86, "role": "Back-Up" },
+      { "name": "Will Huggins", "number": 81, "role": "Back-Up" }
+    ],
+    "QB": [
+      { "name": "John Mateer", "number": 10, "role": "Starter" },
+      { "name": "Michael Hawkins Jr.", "number": 3, "role": "Back-Up" },
+      { "name": "Whitt Newbauer", "number": 16, "role": "Back-Up" }
+    ],
+    "RB": [
+      { "name": "Xavier Robinson", "number": 24, "role": "Starter" },
+      { "name": "Tory Blaylock", "number": 6, "role": "Back-Up" },
+      { "name": "Jaydn Ott", "number": 0, "role": "Back-Up" },
+      { "name": "Jovantae Barnes", "number": 2, "role": "Back-Up" }
+    ]
+  },
+  "defense": {
+    "LDE": [
+      { "name": "Marvin Jones Jr.", "number": 97, "role": "Starter" },
+      { "name": "Taylor Wein", "number": 44, "role": "Back-Up" },
+      { "name": "Danny Okoye", "number": 16, "role": "Back-Up" }
+    ],
+    "NT": [
+      { "name": "Damonic Williams", "number": 52, "role": "Starter" },
+      { "name": "David Stone", "number": 0, "role": "Back-Up" },
+      { "name": "Markus Strong", "number": 99, "role": "Back-Up" },
+      { "name": "Siolaa Lolohea", "number": 96, "role": "Back-Up" }
+    ],
+    "DT": [
+      { "name": "Jayden Jackson", "number": 65, "role": "Starter" },
+      { "name": "Gracen Halton", "number": 56, "role": "Back-Up" },
+      { "name": "Trent Wilson", "number": 90, "role": "Back-Up" },
+      { "name": "Nigel Smith II", "number": 6, "role": "Back-Up" }
+    ],
+    "RDE": [
+      { "name": "R Mason Thomas", "number": 32, "role": "Starter" },
+      { "name": "Adepoju Adebawore", "number": 34, "role": "Back-Up" },
+      { "name": "Wyatt Gilmore", "number": 42, "role": "Back-Up" }
+    ],
+    "WLB": [
+      { "name": "Kip Lewis", "number": 10, "role": "Starter" },
+      { "name": "Owen Heinecke", "number": 38, "role": "Back-Up" },
+      { "name": "Taylor Heim", "number": 17, "role": "Back-Up" }
+    ],
+    "MLB": [
+      { "name": "Kobie McKinzie", "number": 11, "role": "Starter" },
+      { "name": "Sammy Omosigho", "number": 7, "role": "Back-Up" },
+      { "name": "James Nesta", "number": 47, "role": "Back-Up" }
+    ],
+    "CHEET": [
+      { "name": "Kendal Daniels", "number": 5, "role": "Starter" },
+      { "name": "Reggie Powers III", "number": 13, "role": "Back-Up" }
+    ],
+    "LCB": [
+      { "name": "Courtland Guillory", "number": 4, "role": "Starter" },
+      { "name": "Jacobe Johnson", "number": 19, "role": "Back-Up" },
+      { "name": "Trystan Haynes", "number": 14, "role": "Back-Up" }
+    ],
+    "SS": [
+      { "name": "Peyton Bowen", "number": 22, "role": "Starter" },
+      { "name": "Jaydan Hardy", "number": 1, "role": "Back-Up" },
+      { "name": "Omarion Robinson", "number": 2, "role": "Back-Up" }
+    ],
+    "FS": [
+      { "name": "Robert Spears-Jennings", "number": 3, "role": "Starter" },
+      { "name": "Michael Boganowski", "number": 25, "role": "Back-Up" },
+      { "name": "Reed DeQuasie", "number": 31, "role": "Back-Up" }
+    ],
+    "RCB": [
+      { "name": "Eli Bowen", "number": 23, "role": "Starter" },
+      { "name": "Devon Jordan", "number": 12, "role": "Back-Up" },
+      { "name": "Maliek Hawkins", "number": 37, "role": "Back-Up" }
+    ]
+  },
+  "specialTeams": {
+    "PT": [
+      { "name": "Grayson Miller", "number": 43, "role": "Starter" },
+      { "name": "Jacob Ulrich", "number": 87, "role": "Back-Up" }
+    ],
+    "PK": [
+      { "name": "Tate Sandell", "number": 29, "role": "Starter" },
+      { "name": "Austin Welch", "number": 95, "role": "Back-Up" },
+      { "name": "Liam Evans", "number": 35, "role": "Back-Up" }
+    ],
+    "KO": [
+      { "name": "Tate Sandell", "number": 29, "role": "Starter" },
+      { "name": "Austin Welch", "number": 95, "role": "Back-Up" },
+      { "name": "Liam Evans", "number": 35, "role": "Back-Up" }
+    ],
+    "LS": [
+      { "name": "Ben Anderson", "number": 49, "role": "Starter" },
+      { "name": "Seth Freeman", "number": 50, "role": "Back-Up" }
+    ],
+    "H": [
+      { "name": "Jacob Ulrich", "number": 87, "role": "Starter" },
+      { "name": "John Mateer", "number": 10, "role": "Back-Up" },
+      { "name": "Michael Hawkins Jr.", "number": 3, "role": "Back-Up" },
+      { "name": "Grayson Miller", "number": 43, "role": "Back-Up" }
+    ],
+    "PR": [
+      { "name": "Isaiah Sategna III", "number": 5, "role": "Starter" },
+      { "name": "Peyton Bowen", "number": 22, "role": "Back-Up" },
+      { "name": "Jacob Jordan", "number": 88, "role": "Back-Up" },
+      { "name": "Omarion Robinson", "number": 2, "role": "Back-Up" }
+    ],
+    "KR": [
+      { "name": "Isaiah Sategna III", "number": 5, "role": "Starter" },
+      { "name": "Peyton Bowen", "number": 22, "role": "Back-Up" }
+    ]
+  }
+}
