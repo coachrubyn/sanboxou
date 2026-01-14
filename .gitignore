@@ -47,3 +47,6 @@ data/cache/headshots.json
 
 cfbd-python/
 .env*.local
+
+# duplicate directory
+ou-football-dashboard/

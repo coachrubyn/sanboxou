@@ -7,6 +7,7 @@ import type { Player } from '@/lib/types'
 import { generateOUHeadshotUrl } from '@/lib/ou-headshots'
 import { mapToGranularPosition } from '@/lib/types'
 import { findPlayerInDepthChart } from '@/lib/depth-chart'
+import { getCachedRoster, saveRosterToCache } from '@/lib/roster-cache'
 
 const execAsync = promisify(exec)
 
@@ -151,6 +152,12 @@ function processRoster(cfbdRoster: CFBDRosterPlayer[]): Player[] {
 }
 
 export async function GET(request: NextRequest) {
+  // Extract parameters outside try block for error handling
+  const url = new URL(request.url)
+  const year = url.searchParams.get('year') || '2025'
+  const team = url.searchParams.get('team') || 'Oklahoma'
+  const yearNum = parseInt(year, 10)
+  
   try {
     // Get API key from .env file and trim any whitespace/newlines
     const apiKey = (process.env.CFBD_API_KEY || process.env.NEXT_PUBLIC_CFBD_API_KEY || '').trim()
@@ -163,19 +170,36 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get year from query parameter, default to 2025
-    const url = new URL(request.url)
-    const year = url.searchParams.get('year') || '2025'
-    const team = url.searchParams.get('team') || 'Oklahoma'
-    
     // Validate year is a number
-    const yearNum = parseInt(year, 10)
     if (isNaN(yearNum) || yearNum < 2000 || yearNum > 2100) {
       return NextResponse.json(
         { error: 'Invalid year parameter. Must be a valid year between 2000 and 2100.' },
         { status: 400 }
       )
     }
+
+    // Check for force refresh parameter
+    const forceRefresh = url.searchParams.get('refresh') === 'true'
+
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cachedRoster = await getCachedRoster(yearNum, team)
+      if (cachedRoster) {
+        console.log(`[CACHE] Returning cached roster for ${team} ${yearNum}`)
+        return NextResponse.json({
+          count: cachedRoster.length,
+          data: cachedRoster,
+          cached: true
+        }, {
+          headers: {
+            'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+          }
+        })
+      }
+    }
+
+    // Cache miss or force refresh - fetch from API
+    console.log(`[CACHE MISS] Fetching fresh roster for ${team} ${yearNum}`)
 
     // Detect if we're on Vercel (Python not available in Vercel serverless functions)
     const isVercel = !!process.env.VERCEL
@@ -343,9 +367,17 @@ export async function GET(request: NextRequest) {
 
     console.log(`Successfully processed ${roster.length} players`)
 
+    // Save to cache for future requests
+    await saveRosterToCache(yearNum, team, roster)
+
     return NextResponse.json({
       count: roster.length,
-      data: roster
+      data: roster,
+      cached: false
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+      }
     })
   } catch (error) {
     console.error('Error fetching roster:', error)
@@ -353,6 +385,23 @@ export async function GET(request: NextRequest) {
     // Check if it's a rate limit error
     const errorMessage = error instanceof Error ? error.message : String(error)
     if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('quota exceeded')) {
+      // Try to return cached data if available
+      const cachedRoster = await getCachedRoster(yearNum, team)
+      if (cachedRoster) {
+        console.log('[ERROR FALLBACK] Returning cached roster due to rate limit')
+        return NextResponse.json({
+          count: cachedRoster.length,
+          data: cachedRoster,
+          cached: true,
+          warning: 'Rate limit exceeded, returning cached data'
+        }, {
+          status: 200,
+          headers: {
+            'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+          }
+        })
+      }
+      
       return NextResponse.json(
         { 
           error: 'CFBD API rate limit exceeded',
@@ -361,6 +410,23 @@ export async function GET(request: NextRequest) {
         },
         { status: 429 }
       )
+    }
+    
+    // For other errors, try to return cached data if available
+    const cachedRoster = await getCachedRoster(yearNum, team)
+    if (cachedRoster) {
+      console.log('[ERROR FALLBACK] Returning cached roster due to API error')
+      return NextResponse.json({
+        count: cachedRoster.length,
+        data: cachedRoster,
+        cached: true,
+        warning: 'API error occurred, returning cached data'
+      }, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+        }
+      })
     }
     
     return NextResponse.json(
