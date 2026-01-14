@@ -6,12 +6,17 @@ import os
 import json
 from pathlib import Path
 
-# Load environment variables from .env file
-from dotenv import load_dotenv
-project_root = Path(__file__).parent.parent
-load_dotenv(project_root / ".env")
+# Try to load environment variables from .env file (optional)
+try:
+    from dotenv import load_dotenv
+    project_root = Path(__file__).parent.parent
+    load_dotenv(project_root / ".env")
+except ImportError:
+    # dotenv not installed, that's okay - we'll use command line args or env vars
+    pass
 
 # Add the cfbd-python directory to the path
+project_root = Path(__file__).parent.parent
 cfbd_path = project_root / "cfbd-python"
 sys.path.insert(0, str(cfbd_path))
 
@@ -75,6 +80,10 @@ if __name__ == "__main__":
     
     if len(sys.argv) > 1:
         api_key = sys.argv[1]
+    
+    # Trim whitespace and newlines from API key
+    if api_key:
+        api_key = api_key.strip()
     
     if not api_key:
         print("Error: CFBD_API_KEY environment variable or API key argument required", file=sys.stderr)
