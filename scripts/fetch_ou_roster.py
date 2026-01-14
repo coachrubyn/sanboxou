@@ -103,6 +103,67 @@ def find_working_headshot(first_name: str, last_name: str) -> str:
     return variations[0] if variations else ""
 
 
+def get_scraped_headshots_from_redis(redis_url: str) -> dict:
+    """Get scraped headshots from Redis cache"""
+    if not REDIS_AVAILABLE or not redis_url:
+        return {}
+    
+    try:
+        r = redis.Redis.from_url(redis_url)
+        # The headshots are stored with key 'headshots:ou' in Redis
+        cached_data_str = r.get('headshots:ou')
+        if cached_data_str:
+            cached_data = json.loads(cached_data_str)
+            # Handle both wrapped and unwrapped formats
+            if isinstance(cached_data, dict):
+                if 'data' in cached_data:
+                    return cached_data['data']
+                return cached_data
+        print(f"[SCRAPED] No scraped headshots found in Redis", file=sys.stderr)
+    except Exception as e:
+        print(f"[SCRAPED] Error reading scraped headshots from Redis: {str(e)}", file=sys.stderr)
+    
+    return {}
+
+
+def normalize_name(name: str) -> str:
+    """Normalize player name for matching (matching TypeScript logic)"""
+    import re
+    normalized = name.lower().strip()
+    normalized = re.sub(r'\s+', ' ', normalized)  # Replace multiple spaces with single space
+    normalized = re.sub(r'[.,]', '', normalized)  # Remove periods and commas
+    normalized = re.sub(r'\s+football\s*$', '', normalized, flags=re.IGNORECASE)  # Remove "football" suffix
+    normalized = re.sub(r'^\d+\s*', '', normalized)  # Remove leading numbers
+    return normalized.strip()
+
+
+def find_scraped_headshot(player_name: str, scraped_headshots: dict) -> str:
+    """Find headshot URL from scraped data"""
+    if not scraped_headshots:
+        return ""
+    
+    normalized_name = normalize_name(player_name)
+    
+    # Try exact match first
+    if normalized_name in scraped_headshots:
+        return scraped_headshots[normalized_name]
+    
+    # Try partial matches
+    name_parts = normalized_name.split()
+    for scraped_name, url in scraped_headshots.items():
+        # Check if all name parts are in the scraped name or vice versa
+        all_parts_match = all(
+            part in scraped_name for part in name_parts if len(part) > 2
+        ) or all(
+            part in normalized_name for part in scraped_name.split() if len(part) > 2
+        )
+        
+        if all_parts_match:
+            return url
+    
+    return ""
+
+
 def get_class_from_year(year: int) -> str:
     """Determine class from year (1-4 represents year in school)"""
     if year == 1:
@@ -153,20 +214,35 @@ def map_position(cfbd_position: str) -> str:
     return position_map.get(cfbd_position.upper(), 'OL')
 
 
-def process_roster(roster_data: list, team: str = "Oklahoma") -> list:
+def process_roster(roster_data: list, team: str = "Oklahoma", redis_url: str = None) -> list:
     """Process raw CFBD roster data into our Player format with validated headshots"""
     processed_players = []
+    
+    # Get scraped headshots from Redis first (these are the correct ones from web scraping)
+    scraped_headshots = {}
+    if redis_url and REDIS_AVAILABLE:
+        scraped_headshots = get_scraped_headshots_from_redis(redis_url)
+        if scraped_headshots:
+            print(f"[SCRAPED] Loaded {len(scraped_headshots)} scraped headshots from Redis", file=sys.stderr)
     
     for player in roster_data:
         if not player.get('position'):
             continue  # Skip players without positions
         
-        first_name = player.get('firstName', '')
-        last_name = player.get('lastName', '')
+        first_name = player.get('firstName', '').strip()
+        last_name = player.get('lastName', '').strip()
         player_name = player.get('name', f"{first_name} {last_name}").strip()
         
-        # Generate and validate headshot
-        headshot = find_working_headshot(first_name, last_name)
+        # Priority 1: Try to find scraped headshot (most reliable)
+        headshot = find_scraped_headshot(player_name, scraped_headshots)
+        
+        # Priority 2: If no scraped headshot found, generate and validate
+        if not headshot:
+            headshot = find_working_headshot(first_name, last_name)
+            if not headshot:
+                # Last resort: generate URL without validation
+                variations = generate_headshot_variations(first_name, last_name)
+                headshot = variations[0] if variations else ""
         
         # Create processed player object
         processed_player = {
@@ -265,11 +341,13 @@ def fetch_ou_roster(api_key: str, year: int = 2024, team: str = "Oklahoma"):
             }
             raw_roster_data.append(player_dict)
         
-        # Process roster (validate headshots, map positions, etc.)
-        processed_roster = process_roster(raw_roster_data, team)
+        # Get Redis URL for scraped headshots
+        redis_url = os.getenv("REDIS_URL")
+        
+        # Process roster (use scraped headshots from Redis, validate others)
+        processed_roster = process_roster(raw_roster_data, team, redis_url)
         
         # Save to Redis if available
-        redis_url = os.getenv("REDIS_URL")
         if redis_url and REDIS_AVAILABLE:
             save_to_redis(redis_url, year, team, processed_roster, ttl_seconds=3600)
         

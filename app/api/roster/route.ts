@@ -183,16 +183,47 @@ export async function GET(request: NextRequest) {
 
     // Check cache first (unless force refresh) - this includes Redis with fully processed roster
     if (!forceRefresh) {
+      console.log(`[ROSTER API] Checking cache for ${team} ${yearNum}`)
       const cachedRoster = await getCachedRoster(yearNum, team)
+      console.log(`[ROSTER API] Cache result: ${cachedRoster ? 'found' : 'not found'}, type: ${typeof cachedRoster}, isArray: ${Array.isArray(cachedRoster)}, length: ${Array.isArray(cachedRoster) ? cachedRoster.length : 'N/A'}`)
+      
       if (cachedRoster && Array.isArray(cachedRoster) && cachedRoster.length > 0) {
+        // Log first player for debugging
+        const firstPlayer = cachedRoster[0]
+        console.log(`[ROSTER API] First player in cache:`, {
+          hasName: !!firstPlayer?.name,
+          name: firstPlayer?.name,
+          hasHeadshot: !!firstPlayer?.headshot,
+          headshotPreview: firstPlayer?.headshot?.substring(0, 50) || 'none',
+          hasRole: !!firstPlayer?.role,
+          role: firstPlayer?.role,
+          keys: firstPlayer ? Object.keys(firstPlayer) : []
+        })
+        
         // Check if this is a fully processed roster from Python (has headshot, role, etc.)
         const isProcessedRoster = cachedRoster[0] && 
           typeof cachedRoster[0] === 'object' && 
           'headshot' in cachedRoster[0] &&
           'role' in cachedRoster[0]
         
+        console.log(`[ROSTER API] Is processed roster: ${isProcessedRoster}`)
+        
         if (isProcessedRoster) {
-          console.log(`[CACHE] Returning fully processed roster from Redis/Python for ${team} ${yearNum}`)
+          // Log sample of actual data being returned
+          const samplePlayers = cachedRoster.slice(0, 3).map((p: any) => ({
+            name: p?.name || 'NO NAME',
+            headshot: p?.headshot ? p.headshot.substring(0, 60) + '...' : 'NO HEADSHOT',
+            position: p?.position || 'NO POSITION',
+            number: p?.number || 'NO NUMBER'
+          }))
+          console.log(`[CACHE] Returning fully processed roster from Redis/Python for ${team} ${yearNum} (${cachedRoster.length} players)`)
+          console.log(`[CACHE] Sample players:`, JSON.stringify(samplePlayers, null, 2))
+          
+          // Validate that players have required fields
+          const playersWithNames = cachedRoster.filter((p: any) => p?.name)
+          const playersWithHeadshots = cachedRoster.filter((p: any) => p?.headshot)
+          console.log(`[CACHE] Players with names: ${playersWithNames.length}/${cachedRoster.length}, Players with headshots: ${playersWithHeadshots.length}/${cachedRoster.length}`)
+          
           return NextResponse.json({
             count: cachedRoster.length,
             data: cachedRoster,
@@ -205,10 +236,24 @@ export async function GET(request: NextRequest) {
           })
         } else {
           // Legacy cache format, still return it but log
-          console.log(`[CACHE] Returning cached roster (legacy format) for ${team} ${yearNum}`)
+          console.log(`[CACHE] Returning cached roster (legacy format) for ${team} ${yearNum} (${cachedRoster.length} players)`)
+          // Try to add missing fields if they're not present
+          const processedRoster = cachedRoster.map((player: any) => {
+            if (!player.headshot && player.name) {
+              // Try to generate headshot if missing
+              const nameParts = player.name.split(' ')
+              if (nameParts.length >= 2) {
+                player.headshot = generateOUHeadshotUrl(player.name)
+              }
+            }
+            if (!player.role) {
+              player.role = 'Practice Player'
+            }
+            return player
+          })
           return NextResponse.json({
-            count: cachedRoster.length,
-            data: cachedRoster,
+            count: processedRoster.length,
+            data: processedRoster,
             cached: true
           }, {
             headers: {
@@ -216,6 +261,13 @@ export async function GET(request: NextRequest) {
             }
           })
         }
+      } else if (cachedRoster) {
+        // Data exists but isn't in expected format
+        console.warn(`[ROSTER API] Cache data exists but isn't in expected format:`, {
+          type: typeof cachedRoster,
+          isArray: Array.isArray(cachedRoster),
+          keys: typeof cachedRoster === 'object' ? Object.keys(cachedRoster) : []
+        })
       }
     }
 

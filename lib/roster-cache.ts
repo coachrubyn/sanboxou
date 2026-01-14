@@ -120,26 +120,65 @@ export async function getCachedRoster(year: number, team: string): Promise<any |
   if (redis) {
     try {
       const cacheKey = getCacheKey(year, team)
+      console.log(`[REDIS] Attempting to read cache key: ${cacheKey}`)
       const cachedDataStr = await redis.get(cacheKey)
       
       if (cachedDataStr) {
-        const cachedData: RosterCacheData = JSON.parse(cachedDataStr)
+        console.log(`[REDIS] Found data in Redis for key: ${cacheKey}, length: ${cachedDataStr.length}`)
+        let cachedData: RosterCacheData
         
-        // Check if cache matches year and team
-        if (cachedData.year === year && cachedData.team === team) {
+        // Handle both string and already-parsed data
+        if (typeof cachedDataStr === 'string') {
+          cachedData = JSON.parse(cachedDataStr)
+        } else {
+          cachedData = cachedDataStr as RosterCacheData
+        }
+        
+        console.log(`[REDIS] Parsed cache data - year: ${cachedData.year} (type: ${typeof cachedData.year}), team: "${cachedData.team}", has data: ${!!cachedData.data}, data type: ${Array.isArray(cachedData.data) ? 'array' : typeof cachedData.data}`)
+        
+        // Check if cache matches year and team (with type coercion for robustness)
+        const yearMatch = Number(cachedData.year) === Number(year)
+        const teamMatch = String(cachedData.team).trim() === String(team).trim()
+        
+        console.log(`[REDIS] Year match: ${yearMatch} (cached: ${cachedData.year}, requested: ${year}), Team match: ${teamMatch} (cached: "${cachedData.team}", requested: "${team}")`)
+        
+        if (yearMatch && teamMatch) {
           // Check if cache is expired
           if (now < cachedData.expiresAt) {
-            console.log(`[REDIS CACHE HIT] Returning Redis cached roster for ${team} ${year}`)
-            return cachedData.data
+            console.log(`[REDIS CACHE HIT] Returning Redis cached roster for ${team} ${year}, data length: ${Array.isArray(cachedData.data) ? cachedData.data.length : 'not array'}`)
+            
+            // Ensure data is in the right format
+            if (cachedData.data && Array.isArray(cachedData.data)) {
+              // Log first player for debugging
+              if (cachedData.data.length > 0) {
+                const firstPlayer = cachedData.data[0]
+                console.log(`[REDIS] First player sample: ${JSON.stringify({ name: firstPlayer?.name, headshot: firstPlayer?.headshot?.substring(0, 50) || 'none', hasName: !!firstPlayer?.name, hasHeadshot: !!firstPlayer?.headshot })}`)
+              }
+              return cachedData.data
+            } else if (cachedData.data) {
+              // If data exists but isn't an array, try to return it anyway
+              console.warn(`[REDIS] Cache data is not an array, returning as-is`)
+              return cachedData.data
+            }
           } else {
             // Cache expired, delete it
+            console.log(`[REDIS] Cache expired for ${team} ${year} (expiresAt: ${cachedData.expiresAt}, now: ${now})`)
             await redis.del(cacheKey)
           }
+        } else {
+          console.log(`[REDIS] Cache data doesn't match requested year/team`)
         }
+      } else {
+        console.log(`[REDIS] No data found in Redis for key: ${cacheKey}`)
       }
     } catch (error) {
-      console.warn('[REDIS] Error reading from Redis, falling back:', error)
+      console.error('[REDIS] Error reading from Redis:', error)
+      if (error instanceof Error) {
+        console.error('[REDIS] Error details:', error.message, error.stack)
+      }
     }
+  } else {
+    console.log('[REDIS] Redis client not available - REDIS_URL may not be set or connection failed')
   }
   
   // METHOD 2: Check in-memory cache (for quick fallback)
