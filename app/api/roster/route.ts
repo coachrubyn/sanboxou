@@ -157,11 +157,11 @@ export async function GET(request: NextRequest) {
   const year = url.searchParams.get('year') || '2025'
   const team = url.searchParams.get('team') || 'Oklahoma'
   const yearNum = parseInt(year, 10)
-  
+
   try {
     // Get API key from .env file and trim any whitespace/newlines
     const apiKey = (process.env.CFBD_API_KEY || process.env.NEXT_PUBLIC_CFBD_API_KEY || '').trim()
-    
+
     if (!apiKey) {
       console.error('CFBD API key not configured. Make sure CFBD_API_KEY is set in your .env file.')
       return NextResponse.json(
@@ -181,20 +181,41 @@ export async function GET(request: NextRequest) {
     // Check for force refresh parameter
     const forceRefresh = url.searchParams.get('refresh') === 'true'
 
-    // Check cache first (unless force refresh)
+    // Check cache first (unless force refresh) - this includes Redis with fully processed roster
     if (!forceRefresh) {
       const cachedRoster = await getCachedRoster(yearNum, team)
-      if (cachedRoster) {
-        console.log(`[CACHE] Returning cached roster for ${team} ${yearNum}`)
-        return NextResponse.json({
-          count: cachedRoster.length,
-          data: cachedRoster,
-          cached: true
-        }, {
-          headers: {
-            'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
-          }
-        })
+      if (cachedRoster && Array.isArray(cachedRoster) && cachedRoster.length > 0) {
+        // Check if this is a fully processed roster from Python (has headshot, role, etc.)
+        const isProcessedRoster = cachedRoster[0] && 
+          typeof cachedRoster[0] === 'object' && 
+          'headshot' in cachedRoster[0] &&
+          'role' in cachedRoster[0]
+        
+        if (isProcessedRoster) {
+          console.log(`[CACHE] Returning fully processed roster from Redis/Python for ${team} ${yearNum}`)
+          return NextResponse.json({
+            count: cachedRoster.length,
+            data: cachedRoster,
+            cached: true,
+            source: 'redis-python'
+          }, {
+            headers: {
+              'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+            }
+          })
+        } else {
+          // Legacy cache format, still return it but log
+          console.log(`[CACHE] Returning cached roster (legacy format) for ${team} ${yearNum}`)
+          return NextResponse.json({
+            count: cachedRoster.length,
+            data: cachedRoster,
+            cached: true
+          }, {
+            headers: {
+              'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+            }
+          })
+        }
       }
     }
 
@@ -240,21 +261,50 @@ export async function GET(request: NextRequest) {
             const rosterResponse = JSON.parse(stdout)
             if (rosterResponse.data && Array.isArray(rosterResponse.data) && rosterResponse.data.length > 0) {
               console.log(`[LOCAL] Python script returned ${rosterResponse.data.length} players`)
-              cfbdRoster = rosterResponse.data.map((player: any) => ({
-                id: String(player.id || ''),
-                firstName: player.firstName || '',
-                lastName: player.lastName || '',
-                name: player.name || `${player.firstName || ''} ${player.lastName || ''}`.trim(),
-                team: player.team || team,
-                position: player.position || null,
-                jersey: player.jersey || null,
-                year: player.year || 1,
-                height: player.height || null,
-                weight: player.weight || null,
-                homeCity: player.homeCity || null,
-                homeState: player.homeState || null,
-                homeCountry: player.homeCountry || null
-              }))
+              
+              // Check if this is already processed roster (has headshot, role, etc.)
+              const firstPlayer = rosterResponse.data[0]
+              const isProcessedRoster = firstPlayer && 
+                typeof firstPlayer === 'object' && 
+                'headshot' in firstPlayer &&
+                'role' in firstPlayer &&
+                'class' in firstPlayer
+              
+              if (isProcessedRoster) {
+                // Python script already processed the roster with validated headshots
+                console.log('[LOCAL] Python returned fully processed roster with validated headshots')
+                
+                // Save to cache and return directly
+                const processedRoster = rosterResponse.data as Player[]
+                await saveRosterToCache(yearNum, team, processedRoster)
+                
+                return NextResponse.json({
+                  count: processedRoster.length,
+                  data: processedRoster,
+                  source: 'python-processed'
+                }, {
+                  headers: {
+                    'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+                  }
+                })
+              } else {
+                // Legacy format - convert to CFBDRosterPlayer format for processing
+                cfbdRoster = rosterResponse.data.map((player: any) => ({
+                  id: String(player.id || ''),
+                  firstName: player.firstName || '',
+                  lastName: player.lastName || '',
+                  name: player.name || `${player.firstName || ''} ${player.lastName || ''}`.trim(),
+                  team: player.team || team,
+                  position: player.position || null,
+                  jersey: player.jersey || null,
+                  year: player.year || 1,
+                  height: player.height || null,
+                  weight: player.weight || null,
+                  homeCity: player.homeCity || null,
+                  homeState: player.homeState || null,
+                  homeCountry: player.homeCountry || null
+                }))
+              }
             }
           } catch (parseError) {
             console.warn('[LOCAL] Failed to parse Python script output, falling back to HTTP API')

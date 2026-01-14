@@ -1,9 +1,11 @@
 """
 Script to fetch OU roster data using the CFBD Python library
+Processes roster data, validates headshots, and saves to Redis
 """
 import sys
 import os
 import json
+import urllib.parse
 from pathlib import Path
 
 # Try to load environment variables from .env file (optional)
@@ -23,9 +25,205 @@ sys.path.insert(0, str(cfbd_path))
 from cfbd import Configuration, ApiClient
 from cfbd.api import TeamsApi
 
+# Try to import Redis (optional)
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    print("Warning: redis package not available. Install with: pip install redis", file=sys.stderr)
+
+# Try to import requests for headshot validation (optional)
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+    print("Warning: requests package not available. Install with: pip install requests", file=sys.stderr)
+
+
+def generate_headshot_variations(first_name: str, last_name: str, width: int = 180, height: int = 270):
+    """Generate headshot URL variations for a player"""
+    base_url = 'https://dxbhsrqyrr690.cloudfront.net/sidearm.nextgen.sites/soonersports.com/images'
+    
+    date_paths = [
+        '2025/7/14',
+        '2025/3/4',
+        '2025/1/1',
+        '2024/12/1',
+        '2024/8/1',
+    ]
+    
+    filename_variations = [
+        f"{last_name}__{first_name}_2025_web.jpg",
+        f"{last_name}__{first_name}_2025_web.JPG",
+        f"{first_name}_{last_name}_2025_web.jpg",
+        f"{first_name}_{last_name}_2025_web.JPG",
+        f"{first_name}_{last_name}_2025_SHcjw.JPG",
+        f"{last_name}__{first_name}_2025_SHcjw.JPG",
+        f"{last_name}__{first_name}_web.jpg",
+        f"{first_name}_{last_name}_web.jpg",
+        f"{last_name}_{first_name}_2025.jpg",
+        f"{first_name}_{last_name}_2025.jpg",
+    ]
+    
+    urls = []
+    for date_path in date_paths:
+        for filename in filename_variations:
+            image_url = f"{base_url}/{date_path}/{filename}"
+            encoded_url = urllib.parse.quote(image_url, safe='')
+            sidearm_url = f"https://images.sidearmdev.com/crop?url={encoded_url}&width={width}&height={height}&type=webp"
+            urls.append(sidearm_url)
+    
+    return urls
+
+
+def check_image_exists(url: str, timeout: int = 2) -> bool:
+    """Check if an image URL exists"""
+    if not REQUESTS_AVAILABLE:
+        return False
+    
+    try:
+        response = requests.head(url, timeout=timeout, allow_redirects=True)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def find_working_headshot(first_name: str, last_name: str) -> str:
+    """Find the first working headshot URL from variations"""
+    variations = generate_headshot_variations(first_name, last_name)
+    
+    # Check first 10 variations for performance
+    for url in variations[:10]:
+        if check_image_exists(url):
+            return url
+    
+    # If none found, return the first variation (most likely)
+    return variations[0] if variations else ""
+
+
+def get_class_from_year(year: int) -> str:
+    """Determine class from year (1-4 represents year in school)"""
+    if year == 1:
+        return 'Freshman'
+    elif year == 2:
+        return 'Sophomore'
+    elif year == 3:
+        return 'Junior'
+    elif year == 4:
+        return 'Senior'
+    elif year >= 5:
+        return 'Graduate'
+    return 'Unknown'
+
+
+def map_position(cfbd_position: str) -> str:
+    """Map CFBD position to our position format"""
+    if not cfbd_position:
+        return 'OL'
+    
+    # Basic position mapping (can be enhanced)
+    position_map = {
+        'QB': 'QB',
+        'RB': 'RB',
+        'FB': 'RB',
+        'WR': 'WR',
+        'TE': 'TE',
+        'OL': 'OL',
+        'C': 'OL',
+        'G': 'OL',
+        'T': 'OL',
+        'DL': 'DL',
+        'DE': 'DL',
+        'DT': 'DL',
+        'NT': 'DL',
+        'LB': 'LB',
+        'ILB': 'LB',
+        'OLB': 'LB',
+        'CB': 'CB',
+        'S': 'S',
+        'FS': 'S',
+        'SS': 'S',
+        'K': 'K',
+        'P': 'P',
+        'LS': 'LS',
+    }
+    
+    return position_map.get(cfbd_position.upper(), 'OL')
+
+
+def process_roster(roster_data: list, team: str = "Oklahoma") -> list:
+    """Process raw CFBD roster data into our Player format with validated headshots"""
+    processed_players = []
+    
+    for player in roster_data:
+        if not player.get('position'):
+            continue  # Skip players without positions
+        
+        first_name = player.get('firstName', '')
+        last_name = player.get('lastName', '')
+        player_name = player.get('name', f"{first_name} {last_name}").strip()
+        
+        # Generate and validate headshot
+        headshot = find_working_headshot(first_name, last_name)
+        
+        # Create processed player object
+        processed_player = {
+            'id': str(player.get('id', f"{player_name}_{player.get('jersey', 'no-number')}")),
+            'name': player_name,
+            'position': map_position(player.get('position')),
+            'number': player.get('jersey'),
+            'class': get_class_from_year(player.get('year', 1)),
+            'status': 'good',
+            'role': 'Practice Player',  # Default role, can be enhanced with depth chart
+            'headshot': headshot
+        }
+        
+        processed_players.append(processed_player)
+    
+    # Sort by position group, then by number
+    position_order = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K', 'P', 'LS']
+    
+    def sort_key(p):
+        pos_idx = position_order.index(p['position']) if p['position'] in position_order else 999
+        number = p.get('number') or 999
+        return (pos_idx, number)
+    
+    processed_players.sort(key=sort_key)
+    
+    return processed_players
+
+
+def save_to_redis(redis_url: str, year: int, team: str, roster_data: list, ttl_seconds: int = 3600):
+    """Save processed roster data to Redis"""
+    if not REDIS_AVAILABLE:
+        return False
+    
+    try:
+        import time
+        r = redis.Redis.from_url(redis_url)
+        cache_key = f"roster:{team}:{year}"
+        now = int(time.time() * 1000)  # milliseconds
+        expires_at = now + (ttl_seconds * 1000)  # milliseconds
+        cache_data = {
+            'year': year,
+            'team': team,
+            'data': roster_data,
+            'cachedAt': now,
+            'expiresAt': expires_at
+        }
+        r.setex(cache_key, ttl_seconds, json.dumps(cache_data))
+        print(f"[REDIS] Saved processed roster for {team} {year} to Redis (expires in {ttl_seconds}s)", file=sys.stderr)
+        return True
+    except Exception as e:
+        print(f"[REDIS] Error saving to Redis: {str(e)}", file=sys.stderr)
+        return False
+
+
 def fetch_ou_roster(api_key: str, year: int = 2024, team: str = "Oklahoma"):
     """
-    Fetch OU roster data from CFBD API
+    Fetch OU roster data from CFBD API, process it, and optionally save to Redis
     
     Args:
         api_key: CFBD API key
@@ -33,11 +231,10 @@ def fetch_ou_roster(api_key: str, year: int = 2024, team: str = "Oklahoma"):
         team: Team name (default: "Oklahoma")
     
     Returns:
-        List of roster players as dictionaries
+        Processed roster players as list of dictionaries
     """
     try:
         # Configure API client with API key
-        # The CFBD API uses Bearer token authentication
         configuration = Configuration()
         configuration.access_token = api_key
         
@@ -49,30 +246,39 @@ def fetch_ou_roster(api_key: str, year: int = 2024, team: str = "Oklahoma"):
         roster = teams_api.get_roster(team=team, year=year)
         
         # Convert to list of dictionaries
-        roster_data = []
+        raw_roster_data = []
         for player in roster:
             player_dict = {
                 "id": player.id,
-                "firstName": player.first_name,
-                "lastName": player.last_name,
-                "name": f"{player.first_name} {player.last_name}",
-                "team": player.team,
+                "firstName": player.first_name or "",
+                "lastName": player.last_name or "",
+                "name": f"{player.first_name or ''} {player.last_name or ''}".strip(),
+                "team": player.team or team,
                 "position": player.position,
                 "jersey": player.jersey,
-                "year": player.year,
+                "year": player.year or 1,
                 "height": player.height,
                 "weight": player.weight,
                 "homeCity": player.home_city,
                 "homeState": player.home_state,
                 "homeCountry": player.home_country,
             }
-            roster_data.append(player_dict)
+            raw_roster_data.append(player_dict)
         
-        return roster_data
+        # Process roster (validate headshots, map positions, etc.)
+        processed_roster = process_roster(raw_roster_data, team)
+        
+        # Save to Redis if available
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url and REDIS_AVAILABLE:
+            save_to_redis(redis_url, year, team, processed_roster, ttl_seconds=3600)
+        
+        return processed_roster
     
     except Exception as e:
         print(f"Error fetching roster: {str(e)}", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     # Get API key from environment variable or command line argument
@@ -93,7 +299,7 @@ if __name__ == "__main__":
     year = int(sys.argv[2]) if len(sys.argv) > 2 else 2024
     team = sys.argv[3] if len(sys.argv) > 3 else "Oklahoma"
     
-    # Fetch roster
+    # Fetch and process roster
     roster = fetch_ou_roster(api_key, year, team)
     
     # Output as JSON

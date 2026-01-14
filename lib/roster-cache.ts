@@ -15,6 +15,41 @@ try {
   console.log('[CACHE] Vercel KV not available, using fallback cache')
 }
 
+// Try to import and initialize direct Redis client (will be null if not available)
+let redisClient: any = null
+let redisInitialized = false
+async function getRedisClient() {
+  if (redisInitialized) {
+    return redisClient
+  }
+  
+  redisInitialized = true
+  
+  // Only try Redis if REDIS_URL is set
+  if (!process.env.REDIS_URL) {
+    return null
+  }
+  
+  try {
+    const { createClient } = await import('redis')
+    redisClient = createClient({ url: process.env.REDIS_URL })
+    
+    // Handle connection errors
+    redisClient.on('error', (err: Error) => {
+      console.warn('[REDIS] Redis client error:', err)
+      redisClient = null
+    })
+    
+    await redisClient.connect()
+    console.log('[REDIS] Connected to Redis successfully')
+    return redisClient
+  } catch (error) {
+    console.warn('[REDIS] Could not connect to Redis, using fallback cache:', error)
+    redisClient = null
+    return null
+  }
+}
+
 // In-memory cache for fallback (when KV and filesystem aren't available)
 let memoryCache: {
   data: any
@@ -77,6 +112,33 @@ export async function getCachedRoster(year: number, team: string): Promise<any |
       }
     } catch (error) {
       console.warn('[KV] Error reading from Vercel KV, falling back:', error)
+    }
+  }
+  
+  // METHOD 1b: Try direct Redis (if REDIS_URL is set)
+  const redis = await getRedisClient()
+  if (redis) {
+    try {
+      const cacheKey = getCacheKey(year, team)
+      const cachedDataStr = await redis.get(cacheKey)
+      
+      if (cachedDataStr) {
+        const cachedData: RosterCacheData = JSON.parse(cachedDataStr)
+        
+        // Check if cache matches year and team
+        if (cachedData.year === year && cachedData.team === team) {
+          // Check if cache is expired
+          if (now < cachedData.expiresAt) {
+            console.log(`[REDIS CACHE HIT] Returning Redis cached roster for ${team} ${year}`)
+            return cachedData.data
+          } else {
+            // Cache expired, delete it
+            await redis.del(cacheKey)
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[REDIS] Error reading from Redis, falling back:', error)
     }
   }
   
@@ -157,6 +219,19 @@ export async function saveRosterToCache(
       console.warn('[KV] Error saving to Vercel KV, falling back:', error)
     }
   }
+  
+  // METHOD 1b: Save to direct Redis (if REDIS_URL is set)
+  const redis = await getRedisClient()
+  if (redis) {
+    try {
+      const cacheKey = getCacheKey(year, team)
+      const ttlSeconds = CACHE_EXPIRY_MINUTES * 60
+      await redis.setEx(cacheKey, ttlSeconds, JSON.stringify(cacheData))
+      console.log(`[REDIS CACHE SAVE] Cached roster for ${team} ${year} in Redis (expires in ${CACHE_EXPIRY_MINUTES} minutes)`)
+    } catch (error) {
+      console.warn('[REDIS] Error saving to Redis, falling back:', error)
+    }
+  }
 
   // METHOD 2: Update in-memory cache (works everywhere)
   memoryCache = {
@@ -179,17 +254,39 @@ export async function saveRosterToCache(
 /**
  * Clear roster cache
  */
-export async function clearRosterCache(): Promise<void> {
+export async function clearRosterCache(year?: number, team?: string): Promise<void> {
   memoryCache = null
   
   // Clear Vercel KV cache
   if (kv && process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     try {
-      // Note: We'd need to know the keys to delete them all
-      // For now, just clear in-memory and file cache
-      console.log('[KV] Vercel KV cache will expire naturally')
+      if (year && team) {
+        const cacheKey = getCacheKey(year, team)
+        await kv.del(cacheKey)
+        console.log(`[KV] Cleared Vercel KV cache for ${team} ${year}`)
+      } else {
+        // Note: We'd need to know the keys to delete them all
+        console.log('[KV] Vercel KV cache will expire naturally')
+      }
     } catch (error) {
       console.warn('[KV] Error clearing Vercel KV cache:', error)
+    }
+  }
+  
+  // Clear Redis cache
+  const redis = await getRedisClient()
+  if (redis) {
+    try {
+      if (year && team) {
+        const cacheKey = getCacheKey(year, team)
+        await redis.del(cacheKey)
+        console.log(`[REDIS] Cleared Redis cache for ${team} ${year}`)
+      } else {
+        // Note: We'd need to know the keys to delete them all
+        console.log('[REDIS] Redis cache will expire naturally')
+      }
+    } catch (error) {
+      console.warn('[REDIS] Error clearing Redis cache:', error)
     }
   }
   
