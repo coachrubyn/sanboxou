@@ -1,8 +1,10 @@
 import fs from 'fs'
 import path from 'path'
+import { getCachedData, saveCachedData, deleteCachedData } from './redis-cache'
 
 const CACHE_DIR = path.join(process.cwd(), 'data', 'cache', 'player-stats')
 const CACHE_EXPIRY_HOURS = 24 // Cache expires after 24 hours
+const CACHE_EXPIRY_SECONDS = CACHE_EXPIRY_HOURS * 60 * 60 // 24 hours in seconds
 
 // Ensure cache directory exists
 function ensureCacheDir() {
@@ -19,6 +21,11 @@ function getCacheFilePath(playerId: string): string {
   return path.join(CACHE_DIR, `${safeId}.json`)
 }
 
+// Get cache key for Redis
+function getCacheKey(playerId: string): string {
+  return `player-stats:${playerId}`
+}
+
 // Cache data structure
 interface CacheData {
   playerId: string
@@ -31,26 +38,28 @@ interface CacheData {
 /**
  * Get cached player stats if available and not expired
  */
-export function getCachedPlayerStats(playerId: string): CacheData | null {
+export async function getCachedPlayerStats(playerId: string): Promise<CacheData | null> {
+  const cacheKey = getCacheKey(playerId)
+  const cacheFile = getCacheFilePath(playerId)
+  
   try {
-    const cacheFile = getCacheFilePath(playerId)
+    const cachedData = await getCachedData(cacheKey, cacheFile)
     
-    if (!fs.existsSync(cacheFile)) {
-      return null
+    if (cachedData) {
+      // Ensure it has the CacheData structure
+      if (cachedData.playerId && cachedData.data) {
+        return cachedData as CacheData
+      }
+      // If it's just the data, wrap it
+      return {
+        playerId,
+        data: cachedData,
+        cachedAt: Date.now(),
+        expiresAt: Date.now() + (CACHE_EXPIRY_SECONDS * 1000)
+      } as CacheData
     }
-
-    const fileContent = fs.readFileSync(cacheFile, 'utf-8')
-    const cacheData: CacheData = JSON.parse(fileContent)
-
-    // Check if cache is expired
-    const now = Date.now()
-    if (now > cacheData.expiresAt) {
-      // Cache expired, delete the file
-      fs.unlinkSync(cacheFile)
-      return null
-    }
-
-    return cacheData
+    
+    return null
   } catch (error) {
     console.error(`Error reading cache for player ${playerId}:`, error)
     return null
@@ -60,15 +69,15 @@ export function getCachedPlayerStats(playerId: string): CacheData | null {
 /**
  * Save player stats to cache
  */
-export function savePlayerStatsToCache(
+export async function savePlayerStatsToCache(
   playerId: string,
   playerName: string | undefined,
   statsData: Record<number, any[]>
-): void {
+): Promise<void> {
+  const cacheKey = getCacheKey(playerId)
+  const cacheFile = getCacheFilePath(playerId)
+  
   try {
-    ensureCacheDir()
-    const cacheFile = getCacheFilePath(playerId)
-    
     const now = Date.now()
     const cacheData: CacheData = {
       playerId,
@@ -78,7 +87,7 @@ export function savePlayerStatsToCache(
       expiresAt: now + (CACHE_EXPIRY_HOURS * 60 * 60 * 1000) // 24 hours from now
     }
 
-    fs.writeFileSync(cacheFile, JSON.stringify(cacheData, null, 2), 'utf-8')
+    await saveCachedData(cacheKey, cacheData, CACHE_EXPIRY_SECONDS, cacheFile)
     console.log(`Cached stats for player ${playerId} (${playerName || 'unknown'})`)
   } catch (error) {
     console.error(`Error saving cache for player ${playerId}:`, error)
@@ -89,13 +98,13 @@ export function savePlayerStatsToCache(
 /**
  * Clear cache for a specific player (useful for manual refresh)
  */
-export function clearPlayerCache(playerId: string): void {
+export async function clearPlayerCache(playerId: string): Promise<void> {
+  const cacheKey = getCacheKey(playerId)
+  const cacheFile = getCacheFilePath(playerId)
+  
   try {
-    const cacheFile = getCacheFilePath(playerId)
-    if (fs.existsSync(cacheFile)) {
-      fs.unlinkSync(cacheFile)
-      console.log(`Cleared cache for player ${playerId}`)
-    }
+    await deleteCachedData(cacheKey, cacheFile)
+    console.log(`Cleared cache for player ${playerId}`)
   } catch (error) {
     console.error(`Error clearing cache for player ${playerId}:`, error)
   }

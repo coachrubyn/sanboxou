@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as cheerio from 'cheerio'
 import fs from 'fs'
 import path from 'path'
+import { getCachedData, saveCachedData } from '@/lib/redis-cache'
 
 const HEADSHOTS_CACHE_FILE = path.join(process.cwd(), 'data', 'cache', 'headshots.json')
+const HEADSHOTS_CACHE_KEY = 'headshots:ou'
+const HEADSHOTS_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
 const OU_ROSTER_URL = 'https://soonersports.com/sports/football/roster'
 
 // Ensure cache directory exists
@@ -15,11 +18,17 @@ function ensureCacheDir() {
 }
 
 // Load cached headshots
-function loadCachedHeadshots(): Record<string, string> {
+async function loadCachedHeadshots(): Promise<Record<string, string>> {
   try {
+    const cachedData = await getCachedData(HEADSHOTS_CACHE_KEY, HEADSHOTS_CACHE_FILE)
+    if (cachedData && typeof cachedData === 'object') {
+      return cachedData as Record<string, string>
+    }
+    // Fallback to file if Redis doesn't have it
     if (fs.existsSync(HEADSHOTS_CACHE_FILE)) {
       const content = fs.readFileSync(HEADSHOTS_CACHE_FILE, 'utf-8')
-      return JSON.parse(content)
+      const fileData = JSON.parse(content)
+      return fileData.data || fileData || {}
     }
   } catch (error) {
     console.error('Error loading cached headshots:', error)
@@ -28,10 +37,10 @@ function loadCachedHeadshots(): Record<string, string> {
 }
 
 // Save headshots to cache
-function saveHeadshotsToCache(headshots: Record<string, string>) {
+async function saveHeadshotsToCache(headshots: Record<string, string>) {
   try {
     ensureCacheDir()
-    fs.writeFileSync(HEADSHOTS_CACHE_FILE, JSON.stringify(headshots, null, 2), 'utf-8')
+    await saveCachedData(HEADSHOTS_CACHE_KEY, headshots, HEADSHOTS_CACHE_TTL_SECONDS, HEADSHOTS_CACHE_FILE)
   } catch (error) {
     console.error('Error saving headshots to cache:', error)
   }
@@ -149,7 +158,7 @@ export async function GET(request: NextRequest) {
   
   try {
     // Load cached headshots
-    const cachedHeadshots = loadCachedHeadshots()
+    const cachedHeadshots = await loadCachedHeadshots()
     
     // Return cached if available and not forcing refresh
     if (!forceRefresh && Object.keys(cachedHeadshots).length > 0) {
@@ -168,7 +177,7 @@ export async function GET(request: NextRequest) {
     const mergedHeadshots = { ...cachedHeadshots, ...headshots }
     
     // Save to cache
-    saveHeadshotsToCache(mergedHeadshots)
+    await saveHeadshotsToCache(mergedHeadshots)
     
     return NextResponse.json({
       success: true,
@@ -179,11 +188,12 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error in scrape-headshots endpoint:', error)
+    const fallbackHeadshots = await loadCachedHeadshots()
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        headshots: loadCachedHeadshots() // Return cached data even on error
+        headshots: fallbackHeadshots // Return cached data even on error
       },
       { status: 500 }
     )

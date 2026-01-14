@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCachedData, saveCachedData } from '@/lib/redis-cache'
+
+const CFBD_STATS_CACHE_TTL_SECONDS = 6 * 60 * 60 // 6 hours
+
+function getCFBDStatsCacheKey(playerName: string, season: string, team: string): string {
+  return `cfbd-stats:${playerName.toLowerCase()}:${season}:${team}`
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const playerName = searchParams.get('player')
   const season = searchParams.get('season') || '2024'
   const team = searchParams.get('team') || 'Oklahoma'
+  const forceRefresh = searchParams.get('refresh') === 'true'
   
   if (!playerName) {
     return NextResponse.json(
@@ -14,6 +22,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cacheKey = getCFBDStatsCacheKey(playerName, season, team)
+      const cachedData = await getCachedData(cacheKey)
+      if (cachedData) {
+        console.log(`[CACHE] Returning cached CFBD stats for ${playerName}, season ${season}`)
+        return NextResponse.json({
+          count: cachedData.count || cachedData.data?.length || 0,
+          data: cachedData.data || cachedData,
+          player: cachedData.player,
+          cached: true
+        })
+      }
+    }
+
     const apiKey = process.env.CFBD_API_KEY || process.env.NEXT_PUBLIC_CFBD_API_KEY
     
     if (!apiKey) {
@@ -80,10 +103,19 @@ export async function GET(request: NextRequest) {
        `${stat.firstName} ${stat.lastName}`.toLowerCase() === playerName.toLowerCase())
     )
 
-    return NextResponse.json({
+    const result = {
       count: playerStats.length,
       data: playerStats,
       player: ouPlayer
+    }
+
+    // Save to cache
+    const cacheKey = getCFBDStatsCacheKey(playerName, season, team)
+    await saveCachedData(cacheKey, result, CFBD_STATS_CACHE_TTL_SECONDS)
+
+    return NextResponse.json({
+      ...result,
+      cached: false
     })
   } catch (error) {
     console.error('Error fetching CFBD stats:', error)

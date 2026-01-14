@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCachedData, saveCachedData } from '@/lib/redis-cache'
+
+const ADVANCED_STATS_CACHE_TTL_SECONDS = 6 * 60 * 60 // 6 hours
+
+function getAdvancedStatsCacheKey(playerId: string, year: string, team: string): string {
+  return `advanced-stats:${playerId}:${year}:${team}`
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const playerId = searchParams.get('playerId')
   const year = searchParams.get('year') || new Date().getFullYear().toString()
   const team = searchParams.get('team') || 'Oklahoma'
+  const forceRefresh = searchParams.get('refresh') === 'true'
   
   if (!playerId) {
     return NextResponse.json(
@@ -14,6 +22,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cacheKey = getAdvancedStatsCacheKey(playerId, year, team)
+      const cachedData = await getCachedData(cacheKey)
+      if (cachedData) {
+        console.log(`[CACHE] Returning cached advanced stats for player ${playerId}, year ${year}`)
+        return NextResponse.json({
+          success: true,
+          data: cachedData,
+          cached: true
+        })
+      }
+    }
+
     const apiKey = process.env.CFBD_API_KEY || process.env.NEXT_PUBLIC_CFBD_API_KEY
     
     if (!apiKey) {
@@ -63,13 +85,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const resultData = {
+      usage: usageData,
+      ppa: ppaData,
+      year: parseInt(year)
+    }
+
+    // Save to cache
+    const cacheKey = getAdvancedStatsCacheKey(playerId, year, team)
+    await saveCachedData(cacheKey, resultData, ADVANCED_STATS_CACHE_TTL_SECONDS)
+
     return NextResponse.json({
       success: true,
-      data: {
-        usage: usageData,
-        ppa: ppaData,
-        year: parseInt(year)
-      }
+      data: resultData,
+      cached: false
     })
   } catch (error) {
     console.error('Error fetching CFBD advanced stats:', error)

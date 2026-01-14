@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
 
     // Check cache now that we have the player ID (unless force refresh is requested)
     if (!forceRefresh) {
-      const cachedData = getCachedPlayerStats(finalPlayerId)
+      const cachedData = await getCachedPlayerStats(finalPlayerId)
       if (cachedData) {
         console.log(`Returning cached stats for player ${finalPlayerId} (${cachedData.playerName || 'unknown'})`)
         return NextResponse.json({
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
                                   ? `${playerInfo.firstName} ${playerInfo.lastName}` 
                                   : playerName) || 
                                 'Unknown'
-      savePlayerStatsToCache(finalPlayerId, playerDisplayName, seasonsStats)
+      await savePlayerStatsToCache(finalPlayerId, playerDisplayName, seasonsStats)
     }
 
     return NextResponse.json({
