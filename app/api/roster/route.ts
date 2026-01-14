@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { exec } from 'child_process'
-import { promisify } from 'util'
 import path from 'path'
 import fs from 'fs'
 import type { Player } from '@/lib/types'
@@ -8,7 +6,7 @@ import { generateOUHeadshotUrl } from '@/lib/ou-headshots'
 import { mapToGranularPosition } from '@/lib/types'
 import { findPlayerInDepthChart } from '@/lib/depth-chart'
 
-const execAsync = promisify(exec)
+const CFBD_API_BASE = 'https://api.collegefootballdata.com'
 
 // Load scraped headshots from cache
 function loadScrapedHeadshots(): Record<string, string> {
@@ -119,24 +117,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get the path to the Python script
-    const scriptPath = path.join(process.cwd(), 'scripts', 'fetch_ou_roster.py')
+    // Fetch roster directly from CFBD API
+    const rosterUrl = `${CFBD_API_BASE}/teams/roster?team=${encodeURIComponent(team)}&year=${yearNum}`
     
-    // Execute Python script to fetch roster
-    let stdout: string
-    let stderr: string
-    
-    try {
-      const result = await execAsync(
-        `python3 "${scriptPath}" "${apiKey}" ${yearNum} "${team}"`,
-        { maxBuffer: 10 * 1024 * 1024 } // 10MB buffer for large responses
-      )
-      stdout = result.stdout
-      stderr = result.stderr || ''
-    } catch (execError: any) {
-      // Check if it's a rate limit error
-      const errorMessage = execError.stderr || execError.message || ''
-      if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('quota exceeded')) {
+    const rosterResponse = await fetch(rosterUrl, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json'
+      }
+    })
+
+    if (!rosterResponse.ok) {
+      // Check for rate limit error
+      if (rosterResponse.status === 429) {
         return NextResponse.json(
           { 
             error: 'CFBD API rate limit exceeded',
@@ -146,45 +139,30 @@ export async function GET(request: NextRequest) {
           { status: 429 }
         )
       }
-      throw execError
-    }
-
-    if (stderr && !stderr.includes('Warning')) {
-      console.error('Python script error:', stderr)
       
-      // Check for rate limit in stderr
-      if (stderr.includes('429') || stderr.includes('Too Many Requests') || stderr.includes('quota exceeded')) {
-        return NextResponse.json(
-          { 
-            error: 'CFBD API rate limit exceeded',
-            message: 'Monthly call quota exceeded. Please wait for the quota to reset or upgrade your CFBD API plan.',
-            rateLimitExceeded: true
-          },
-          { status: 429 }
-        )
-      }
+      const errorText = await rosterResponse.text()
+      console.error(`CFBD API error: ${rosterResponse.status} ${rosterResponse.statusText}`, errorText)
+      throw new Error(`CFBD API error: ${rosterResponse.status} ${rosterResponse.statusText}`)
     }
 
-    // Parse JSON response from Python script
-    let rosterResponse: any
-    try {
-      rosterResponse = JSON.parse(stdout)
-    } catch (parseError) {
-      // If parsing fails, check if it's an error response
-      if (stdout.includes('429') || stdout.includes('Too Many Requests') || stdout.includes('quota exceeded')) {
-        return NextResponse.json(
-          { 
-            error: 'CFBD API rate limit exceeded',
-            message: 'Monthly call quota exceeded. Please wait for the quota to reset or upgrade your CFBD API plan.',
-            rateLimitExceeded: true
-          },
-          { status: 429 }
-        )
-      }
-      throw parseError
-    }
+    const cfbdRosterRaw: any[] = await rosterResponse.json()
     
-    const cfbdRoster: CFBDRosterPlayer[] = rosterResponse.data || []
+    // Transform CFBD API response to match expected format
+    const cfbdRoster: CFBDRosterPlayer[] = cfbdRosterRaw.map((player: any) => ({
+      id: String(player.id || ''),
+      firstName: player.first_name || '',
+      lastName: player.last_name || '',
+      name: `${player.first_name || ''} ${player.last_name || ''}`.trim(),
+      team: player.team || team,
+      position: player.position || null,
+      jersey: player.jersey || null,
+      year: player.year || 1,
+      height: player.height || null,
+      weight: player.weight || null,
+      homeCity: player.home_city || null,
+      homeState: player.home_state || null,
+      homeCountry: player.home_country || null
+    }))
 
     // Load scraped headshots
     const scrapedHeadshots = loadScrapedHeadshots()
