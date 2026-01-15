@@ -85,7 +85,7 @@ export async function savePlayerStatsToCache(
       playerName,
       data: statsData,
       cachedAt: now,
-      expiresAt: now + (CACHE_EXPIRY_HOURS * 60 * 60 * 1000) // 24 hours from now
+      expiresAt: now + (CACHE_EXPIRY_SECONDS * 1000) // 30 days from now
     }
 
     await saveCachedData(cacheKey, cacheData, CACHE_EXPIRY_SECONDS, cacheFile)
