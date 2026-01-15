@@ -255,27 +255,11 @@ export async function GET(request: NextRequest) {
         
         console.log(`[ROSTER API] Valid players with names: ${playersWithValidNames.length}/${cachedRoster.length}, Has valid data: ${hasValidData}`)
         
-        // If data is invalid (empty names), try 2024 as fallback
-        if (!hasValidData && yearNum === 2025) {
-          console.log(`[ROSTER API] 2025 data invalid (no valid names), trying 2024 as fallback...`)
-          const fallbackRoster = await getCachedRoster(2024, team)
-          if (fallbackRoster && Array.isArray(fallbackRoster) && fallbackRoster.length > 0) {
-            const fallbackValidNames = fallbackRoster.filter((p: any) => p?.name && p.name.trim().length > 0)
-            if (fallbackValidNames.length > 0) {
-              console.log(`[ROSTER API] Using 2024 fallback data (${fallbackValidNames.length} valid players)`)
-              // Clear the bad 2025 cache so it doesn't keep being used
-              const { clearRosterCache } = await import('@/lib/roster-cache')
-              await clearRosterCache(2025, team)
-              console.log(`[ROSTER API] Cleared invalid 2025 cache`)
-              cachedRoster = fallbackRoster
-              // Update yearNum to reflect we're using 2024 data
-              yearNum = 2024
-            } else {
-              console.log(`[ROSTER API] 2024 fallback also has invalid names, will fetch fresh`)
-            }
-          } else {
-            console.log(`[ROSTER API] No 2024 fallback data available, will fetch fresh`)
-          }
+        // If data is invalid (empty names), don't use fallback - fetch fresh data instead
+        // REMOVED: Automatic fallback to 2024 was causing wrong players to show
+        if (!hasValidData) {
+          console.log(`[ROSTER API] Cached data for ${yearNum} has invalid names, will fetch fresh data`)
+          cachedRoster = null // Force fresh fetch for the requested year
         }
         
         // Check if this is a fully processed roster from Python (has headshot, role, etc.)

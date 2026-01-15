@@ -343,13 +343,13 @@ def save_to_redis(redis_url: str, year: int, team: str, roster_data: list, ttl_s
         return False
 
 
-def fetch_ou_roster(api_key: str, year: int = 2024, team: str = "Oklahoma"):
+def fetch_ou_roster(api_key: str, year: int = 2025, team: str = "Oklahoma"):
     """
     Fetch OU roster data from CFBD API, process it, and optionally save to Redis
     
     Args:
         api_key: CFBD API key
-        year: Season year (default: 2024)
+        year: Season year (default: 2025)
         team: Team name (default: "Oklahoma")
     
     Returns:
@@ -415,9 +415,9 @@ def fetch_ou_roster(api_key: str, year: int = 2024, team: str = "Oklahoma"):
         # Process roster (use scraped headshots from Redis, validate others)
         processed_roster = process_roster(raw_roster_data, team, redis_url)
         
-        # Save to Redis if available
+        # Save to Redis if available (uses default 30-day TTL)
         if redis_url and REDIS_AVAILABLE:
-            save_to_redis(redis_url, year, team, processed_roster, ttl_seconds=3600)
+            save_to_redis(redis_url, year, team, processed_roster)
         
         return processed_roster
     
@@ -442,7 +442,7 @@ if __name__ == "__main__":
         sys.exit(1)
     
     # Get optional year and team from command line
-    year = int(sys.argv[2]) if len(sys.argv) > 2 else 2024
+    year = int(sys.argv[2]) if len(sys.argv) > 2 else 2025
     team = sys.argv[3] if len(sys.argv) > 3 else "Oklahoma"
     
     # Fetch and process roster
