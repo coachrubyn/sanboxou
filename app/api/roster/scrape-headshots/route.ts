@@ -6,7 +6,7 @@ import { getCachedData, saveCachedData } from '@/lib/redis-cache'
 
 const HEADSHOTS_CACHE_FILE = path.join(process.cwd(), 'data', 'cache', 'headshots.json')
 const HEADSHOTS_CACHE_KEY = 'headshots:ou'
-const HEADSHOTS_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
+const HEADSHOTS_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60 // 30 days - ensures headshots persist
 const OU_ROSTER_URL = 'https://soonersports.com/sports/football/roster'
 
 // Ensure cache directory exists

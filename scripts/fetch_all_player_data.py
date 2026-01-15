@@ -2,7 +2,8 @@
 Comprehensive script to fetch all player data (stats, game stats, advanced stats)
 and pre-populate Redis cache for the OU Football Dashboard.
 
-This script can be run periodically (e.g., daily via cron) to keep the cache fresh.
+This script saves data with 30-day TTL, so it only needs to be run monthly or when
+you want to refresh the cache. Data will persist for 30 days without needing daily runs.
 
 Usage:
     python3 scripts/fetch_all_player_data.py [API_KEY] [YEAR] [TEAM] [PLAYER_ID] [--current-year-only]
@@ -47,10 +48,10 @@ Cache Keys (matching TypeScript routes):
     - cfbd-stats:{playerName}:{year}:{team}
 
 Cache TTLs:
-    - Player stats: 24 hours
-    - Game stats: 6 hours
-    - Advanced stats: 6 hours
-    - CFBD stats: 6 hours
+    - Player stats: 30 days
+    - Game stats: 30 days
+    - Advanced stats: 30 days
+    - CFBD stats: 30 days
 """
 import sys
 import os
@@ -83,12 +84,13 @@ except ImportError:
     REDIS_AVAILABLE = False
     print("Warning: redis package not available. Install with: pip install redis", file=sys.stderr)
 
-# Cache TTLs (in seconds) - matching TypeScript routes
+# Cache TTLs (in seconds) - 30 days for all data types to ensure persistence
+# This ensures names, headshots, and stats stay available without needing daily script runs
 CACHE_TTL = {
-    'player_stats': 24 * 60 * 60,  # 24 hours
-    'game_stats': 6 * 60 * 60,     # 6 hours
-    'advanced_stats': 6 * 60 * 60,  # 6 hours
-    'cfbd_stats': 6 * 60 * 60,      # 6 hours
+    'player_stats': 30 * 24 * 60 * 60,  # 30 days
+    'game_stats': 30 * 24 * 60 * 60,     # 30 days
+    'advanced_stats': 30 * 24 * 60 * 60,  # 30 days
+    'cfbd_stats': 30 * 24 * 60 * 60,      # 30 days
 }
 
 

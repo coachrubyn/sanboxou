@@ -312,10 +312,14 @@ def process_roster(roster_data: list, team: str = "Oklahoma", redis_url: str = N
     return processed_players
 
 
-def save_to_redis(redis_url: str, year: int, team: str, roster_data: list, ttl_seconds: int = 3600):
-    """Save processed roster data to Redis"""
+def save_to_redis(redis_url: str, year: int, team: str, roster_data: list, ttl_seconds: int = None):
+    """Save processed roster data to Redis with long TTL (30 days default)"""
     if not REDIS_AVAILABLE:
         return False
+    
+    # Default to 30 days if not specified (roster data is relatively static)
+    if ttl_seconds is None:
+        ttl_seconds = 30 * 24 * 60 * 60  # 30 days in seconds
     
     try:
         import time
@@ -331,7 +335,8 @@ def save_to_redis(redis_url: str, year: int, team: str, roster_data: list, ttl_s
             'expiresAt': expires_at
         }
         r.setex(cache_key, ttl_seconds, json.dumps(cache_data))
-        print(f"[REDIS] Saved processed roster for {team} {year} to Redis (expires in {ttl_seconds}s)", file=sys.stderr)
+        days = ttl_seconds / (24 * 60 * 60)
+        print(f"[REDIS] Saved processed roster for {team} {year} to Redis (expires in {days:.1f} days)", file=sys.stderr)
         return True
     except Exception as e:
         print(f"[REDIS] Error saving to Redis: {str(e)}", file=sys.stderr)

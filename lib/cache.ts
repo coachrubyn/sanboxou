@@ -3,8 +3,9 @@ import path from 'path'
 import { getCachedData, saveCachedData, deleteCachedData } from './redis-cache'
 
 const CACHE_DIR = path.join(process.cwd(), 'data', 'cache', 'player-stats')
-const CACHE_EXPIRY_HOURS = 24 // Cache expires after 24 hours
-const CACHE_EXPIRY_SECONDS = CACHE_EXPIRY_HOURS * 60 * 60 // 24 hours in seconds
+// Cache expires after 30 days - ensures player stats persist without daily script runs
+const CACHE_EXPIRY_DAYS = 30
+const CACHE_EXPIRY_SECONDS = CACHE_EXPIRY_DAYS * 24 * 60 * 60 // 30 days in seconds
 
 // Ensure cache directory exists
 function ensureCacheDir() {

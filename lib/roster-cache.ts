@@ -3,7 +3,9 @@ import path from 'path'
 
 const CACHE_DIR = path.join(process.cwd(), 'data', 'cache')
 const ROSTER_CACHE_FILE = path.join(CACHE_DIR, 'roster.json')
-const CACHE_EXPIRY_MINUTES = 60 // Cache roster for 1 hour (roster doesn't change often)
+// Cache roster for 30 days (roster data is relatively static, but we want it to persist)
+// This ensures names and headshots stay available without needing to run scripts daily
+const CACHE_EXPIRY_MINUTES = 30 * 24 * 60 // 30 days in minutes
 
 // Try to import Vercel KV (will be null if not available)
 let kv: any = null
@@ -105,8 +107,17 @@ export async function getCachedRoster(year: number, team: string): Promise<any |
             console.log(`[KV CACHE HIT] Returning Vercel KV cached roster for ${team} ${year}`)
             return cachedData.data
           } else {
-            // Cache expired, delete it
-            await kv.del(cacheKey)
+            // Cache expired, but return stale data if it's less than 7 days old (grace period)
+            const ageInDays = (now - cachedData.cachedAt) / (1000 * 60 * 60 * 24)
+            if (ageInDays < 7) {
+              console.log(`[KV] Cache expired but returning stale data (${ageInDays.toFixed(1)} days old) for ${team} ${year}`)
+              // Return stale data but don't delete - let it refresh in background
+              return cachedData.data
+            } else {
+              // Cache is very old, delete it
+              console.log(`[KV] Cache very old (${ageInDays.toFixed(1)} days), deleting for ${team} ${year}`)
+              await kv.del(cacheKey)
+            }
           }
         }
       }
@@ -161,9 +172,17 @@ export async function getCachedRoster(year: number, team: string): Promise<any |
               return cachedData.data
             }
           } else {
-            // Cache expired, delete it
-            console.log(`[REDIS] Cache expired for ${team} ${year} (expiresAt: ${cachedData.expiresAt}, now: ${now})`)
-            await redis.del(cacheKey)
+            // Cache expired, but return stale data if it's less than 7 days old (grace period)
+            const ageInDays = (now - cachedData.cachedAt) / (1000 * 60 * 60 * 24)
+            if (ageInDays < 7) {
+              console.log(`[REDIS] Cache expired but returning stale data (${ageInDays.toFixed(1)} days old) for ${team} ${year}`)
+              // Return stale data but don't delete - let it refresh in background
+              return cachedData.data
+            } else {
+              // Cache is very old, delete it
+              console.log(`[REDIS] Cache very old (${ageInDays.toFixed(1)} days), deleting for ${team} ${year}`)
+              await redis.del(cacheKey)
+            }
           }
         } else {
           console.log(`[REDIS] Cache data doesn't match requested year/team`)
@@ -236,7 +255,7 @@ export async function saveRosterToCache(
   rosterData: any
 ): Promise<void> {
   const now = Date.now()
-  const expiresAt = now + (CACHE_EXPIRY_MINUTES * 60 * 1000) // 1 hour from now
+  const expiresAt = now + (CACHE_EXPIRY_MINUTES * 60 * 1000) // 30 days from now
   
   const cacheData: RosterCacheData = {
     year,
@@ -252,8 +271,9 @@ export async function saveRosterToCache(
       const cacheKey = getCacheKey(year, team)
       // Set with expiration (in seconds)
       const ttlSeconds = CACHE_EXPIRY_MINUTES * 60
+      const days = CACHE_EXPIRY_MINUTES / (24 * 60)
       await kv.set(cacheKey, cacheData, { ex: ttlSeconds })
-      console.log(`[KV CACHE SAVE] Cached roster for ${team} ${year} in Vercel KV (expires in ${CACHE_EXPIRY_MINUTES} minutes)`)
+      console.log(`[KV CACHE SAVE] Cached roster for ${team} ${year} in Vercel KV (expires in ${days.toFixed(1)} days)`)
     } catch (error) {
       console.warn('[KV] Error saving to Vercel KV, falling back:', error)
     }
@@ -265,8 +285,9 @@ export async function saveRosterToCache(
     try {
       const cacheKey = getCacheKey(year, team)
       const ttlSeconds = CACHE_EXPIRY_MINUTES * 60
+      const days = CACHE_EXPIRY_MINUTES / (24 * 60)
       await redis.setEx(cacheKey, ttlSeconds, JSON.stringify(cacheData))
-      console.log(`[REDIS CACHE SAVE] Cached roster for ${team} ${year} in Redis (expires in ${CACHE_EXPIRY_MINUTES} minutes)`)
+      console.log(`[REDIS CACHE SAVE] Cached roster for ${team} ${year} in Redis (expires in ${days.toFixed(1)} days)`)
     } catch (error) {
       console.warn('[REDIS] Error saving to Redis, falling back:', error)
     }
@@ -282,8 +303,9 @@ export async function saveRosterToCache(
   // METHOD 3: Try to save to file (works locally, might fail on Vercel)
   try {
     ensureCacheDir()
-    fs.writeFileSync(ROSTER_CACHE_FILE, JSON.stringify(cacheData, null, 2), 'utf-8')
-    console.log(`[FILE CACHE SAVE] Cached roster for ${team} ${year} to file (expires in ${CACHE_EXPIRY_MINUTES} minutes)`)
+          fs.writeFileSync(ROSTER_CACHE_FILE, JSON.stringify(cacheData, null, 2), 'utf-8')
+          const days = CACHE_EXPIRY_MINUTES / (24 * 60)
+          console.log(`[FILE CACHE SAVE] Cached roster for ${team} ${year} to file (expires in ${days.toFixed(1)} days)`)
   } catch (error) {
     // On Vercel, filesystem might be read-only, that's okay - we have KV and in-memory cache
     console.warn('Could not save roster to file cache:', error)

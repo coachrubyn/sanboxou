@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCachedData, saveCachedData } from '@/lib/redis-cache'
 
-const CFBD_STATS_CACHE_TTL_SECONDS = 6 * 60 * 60 // 6 hours
+const CFBD_STATS_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60 // 30 days - ensures CFBD stats persist
 
 function getCFBDStatsCacheKey(playerName: string, season: string, team: string): string {
   return `cfbd-stats:${playerName.toLowerCase()}:${season}:${team}`

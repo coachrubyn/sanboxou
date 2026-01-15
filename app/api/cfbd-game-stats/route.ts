@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCachedData, saveCachedData } from '@/lib/redis-cache'
 
-const GAME_STATS_CACHE_TTL_SECONDS = 6 * 60 * 60 // 6 hours
+const GAME_STATS_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60 // 30 days - ensures game stats persist
 
 function getGameStatsCacheKey(playerId: string, year: string, team?: string): string {
   return team ? `game-stats:${playerId}:${year}:${team}` : `game-stats:${playerId}:${year}`

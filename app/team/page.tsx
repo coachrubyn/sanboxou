@@ -288,6 +288,23 @@ export default function TeamPage() {
           </div>
         )}
         
+        {/* Info message about persistence */}
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start">
+            <div className="flex-shrink-0 text-blue-600">
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> Drag-and-drop changes are saved to the server and persist across page reloads and all devices. 
+                Use the "Reset Changes" button to clear all saved customizations and restore the default depth chart.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Header with refresh and save buttons */}
         <div className="mb-4 flex items-center justify-between">
           <button
@@ -345,25 +362,32 @@ export default function TeamPage() {
             <button
               onClick={async () => {
                 // Reset saved roles to use depth chart
-                try {
-                  const response = await fetch('/api/roster/roles/reset', { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ all: true }) 
-                  })
-                  const result = await response.json()
-                  if (result.success) {
-                    // Reload players after reset
-                    await loadPlayers(true)
+                if (confirm('Are you sure you want to reset all saved drag-and-drop changes? This will clear all custom roles and depth chart orders and restore the default depth chart positions.')) {
+                  try {
+                    const response = await fetch('/api/roster/roles', { 
+                      method: 'DELETE'
+                    })
+                    const result = await response.json()
+                    if (result.success) {
+                      // Reload players after reset
+                      await loadPlayers(true)
+                      setUnsavedChanges(false)
+                      setSaveStatus('idle')
+                    } else {
+                      console.error('Error resetting roles:', result.error)
+                    }
+                  } catch (error) {
+                    console.error('Error resetting roles:', error)
                   }
-                } catch (error) {
-                  console.error('Error resetting roles:', error)
                 }
               }}
               className="flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors"
-              title="Reset all roles to match depth chart"
+              title="Reset all saved drag-and-drop changes to match depth chart"
             >
-              Reset to Depth Chart
+              <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reset Changes
             </button>
             <button
               onClick={() => loadPlayers(true)}

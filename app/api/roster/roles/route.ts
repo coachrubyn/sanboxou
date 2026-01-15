@@ -117,3 +117,21 @@ export async function PUT(request: NextRequest) {
     )
   }
 }
+
+export async function DELETE() {
+  try {
+    // Clear all saved roles by saving an empty object
+    savePlayerRoles({})
+    
+    return NextResponse.json({
+      success: true,
+      message: 'All saved player roles and depth chart orders have been reset'
+    })
+  } catch (error) {
+    console.error('Error resetting player roles:', error)
+    return NextResponse.json(
+      { error: 'Failed to reset player roles' },
+      { status: 500 }
+    )
+  }
+}
