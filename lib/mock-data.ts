@@ -3,7 +3,7 @@ import { Player, FootballPosition } from './types'
 /**
  * Generate mock game-by-game statistics
  */
-export function generateMockGameStats(player: Player, season: number = 2024): Player['gameStats'] {
+export function generateMockGameStats(player: Player, season: number = 2025): Player['gameStats'] {
   const games: Player['gameStats'] = []
   const opponents = ['Texas', 'Texas A&M', 'Baylor', 'TCU', 'Oklahoma State', 'Kansas State', 'Iowa State', 'West Virginia', 'Kansas', 'Texas Tech']
   

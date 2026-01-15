@@ -10,7 +10,7 @@ function getGameStatsCacheKey(playerId: string, year: string, team?: string): st
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const playerId = searchParams.get('playerId')
-  const year = searchParams.get('year') || new Date().getFullYear().toString()
+  const year = searchParams.get('year') || '2025'
   const team = searchParams.get('team') // Make team optional - don't default to Oklahoma
   const forceRefresh = searchParams.get('refresh') === 'true'
   

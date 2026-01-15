@@ -93,6 +93,43 @@ interface CFBDRosterPlayer {
   homeCountry: string | null
 }
 
+// Apply depth chart position and role overrides to an existing player roster
+function applyDepthChartOverrides(players: Player[]): Player[] {
+  return players.map(player => {
+    // Extract first and last name from player name
+    const nameParts = player.name.trim().split(/\s+/)
+    const firstName = nameParts[0] || ''
+    const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
+    
+    // Check depth chart for role and position
+    const depthChartInfo = findPlayerInDepthChart(
+      player.name,
+      player.number,
+      firstName,
+      lastName
+    )
+    
+    // Override role if found in depth chart
+    const role: Player['role'] = depthChartInfo?.role || player.role || 'Practice Player'
+    
+    // Override position if found in depth chart (this is the key fix!)
+    let position = player.position
+    if (depthChartInfo?.position) {
+      position = depthChartInfo.position as Player['position']
+      // Log when we override position from depth chart
+      if (position !== player.position) {
+        console.log(`[DEPTH CHART] Overriding position for ${player.name} (${player.number}): ${player.position} -> ${position}`)
+      }
+    }
+    
+    return {
+      ...player,
+      role,
+      position
+    }
+  })
+}
+
 // Process roster data into Player format (shared by both Python and HTTP paths)
 function processRoster(cfbdRoster: CFBDRosterPlayer[]): Player[] {
   const scrapedHeadshots = loadScrapedHeadshots()
@@ -141,8 +178,8 @@ function processRoster(cfbdRoster: CFBDRosterPlayer[]): Player[] {
       }
     })
     .sort((a, b) => {
-      // Sort by position group, then by number
-      const positionOrder = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K', 'P', 'LS']
+      // Sort by position group, then by number (using granular positions)
+      const positionOrder = ['QB', 'RB', 'WR', 'TE', 'T', 'G', 'C', 'ILB', 'EDGE', 'IDL', 'CB', 'S', 'K', 'P', 'LS']
       const aPos = positionOrder.indexOf(a.position) !== -1 ? positionOrder.indexOf(a.position) : 999
       const bPos = positionOrder.indexOf(b.position) !== -1 ? positionOrder.indexOf(b.position) : 999
       
@@ -156,7 +193,7 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const year = url.searchParams.get('year') || '2025'
   const team = url.searchParams.get('team') || 'Oklahoma'
-  const yearNum = parseInt(year, 10)
+  let yearNum = parseInt(year, 10)
 
   try {
     // Get API key from .env file and trim any whitespace/newlines
@@ -180,11 +217,23 @@ export async function GET(request: NextRequest) {
 
     // Check for force refresh parameter
     const forceRefresh = url.searchParams.get('refresh') === 'true'
+    const clearCache = url.searchParams.get('clearCache') === 'true'
+    
+    // Clear cache if requested
+    if (clearCache) {
+      const { clearRosterCache } = await import('@/lib/roster-cache')
+      await clearRosterCache(yearNum, team)
+      console.log(`[ROSTER API] Cleared cache for ${team} ${yearNum}`)
+      return NextResponse.json({
+        success: true,
+        message: `Cache cleared for ${team} ${yearNum}`
+      })
+    }
 
     // Check cache first (unless force refresh) - this includes Redis with fully processed roster
     if (!forceRefresh) {
       console.log(`[ROSTER API] Checking cache for ${team} ${yearNum}`)
-      const cachedRoster = await getCachedRoster(yearNum, team)
+      let cachedRoster = await getCachedRoster(yearNum, team)
       console.log(`[ROSTER API] Cache result: ${cachedRoster ? 'found' : 'not found'}, type: ${typeof cachedRoster}, isArray: ${Array.isArray(cachedRoster)}, length: ${Array.isArray(cachedRoster) ? cachedRoster.length : 'N/A'}`)
       
       if (cachedRoster && Array.isArray(cachedRoster) && cachedRoster.length > 0) {
@@ -200,6 +249,35 @@ export async function GET(request: NextRequest) {
           keys: firstPlayer ? Object.keys(firstPlayer) : []
         })
         
+        // Validate that players have real names (not just spaces)
+        const playersWithValidNames = cachedRoster.filter((p: any) => p?.name && p.name.trim().length > 0)
+        const hasValidData = playersWithValidNames.length > 0
+        
+        console.log(`[ROSTER API] Valid players with names: ${playersWithValidNames.length}/${cachedRoster.length}, Has valid data: ${hasValidData}`)
+        
+        // If data is invalid (empty names), try 2024 as fallback
+        if (!hasValidData && yearNum === 2025) {
+          console.log(`[ROSTER API] 2025 data invalid (no valid names), trying 2024 as fallback...`)
+          const fallbackRoster = await getCachedRoster(2024, team)
+          if (fallbackRoster && Array.isArray(fallbackRoster) && fallbackRoster.length > 0) {
+            const fallbackValidNames = fallbackRoster.filter((p: any) => p?.name && p.name.trim().length > 0)
+            if (fallbackValidNames.length > 0) {
+              console.log(`[ROSTER API] Using 2024 fallback data (${fallbackValidNames.length} valid players)`)
+              // Clear the bad 2025 cache so it doesn't keep being used
+              const { clearRosterCache } = await import('@/lib/roster-cache')
+              await clearRosterCache(2025, team)
+              console.log(`[ROSTER API] Cleared invalid 2025 cache`)
+              cachedRoster = fallbackRoster
+              // Update yearNum to reflect we're using 2024 data
+              yearNum = 2024
+            } else {
+              console.log(`[ROSTER API] 2024 fallback also has invalid names, will fetch fresh`)
+            }
+          } else {
+            console.log(`[ROSTER API] No 2024 fallback data available, will fetch fresh`)
+          }
+        }
+        
         // Check if this is a fully processed roster from Python (has headshot, role, etc.)
         const isProcessedRoster = cachedRoster[0] && 
           typeof cachedRoster[0] === 'object' && 
@@ -209,69 +287,77 @@ export async function GET(request: NextRequest) {
         console.log(`[ROSTER API] Is processed roster: ${isProcessedRoster}`)
         
         if (isProcessedRoster) {
+          // Apply depth chart position overrides to cached roster (fixes positions from Python)
+          console.log(`[CACHE] Applying depth chart position overrides to cached roster...`)
+          const rosterWithOverrides = applyDepthChartOverrides(cachedRoster as Player[])
+          
           // Log sample of actual data being returned
-          const samplePlayers = cachedRoster.slice(0, 3).map((p: any) => ({
+          const samplePlayers = rosterWithOverrides.slice(0, 3).map((p: any) => ({
             name: p?.name || 'NO NAME',
             headshot: p?.headshot ? p.headshot.substring(0, 60) + '...' : 'NO HEADSHOT',
             position: p?.position || 'NO POSITION',
             number: p?.number || 'NO NUMBER'
           }))
-          console.log(`[CACHE] Returning fully processed roster from Redis/Python for ${team} ${yearNum} (${cachedRoster.length} players)`)
+          console.log(`[CACHE] Returning fully processed roster from Redis/Python for ${team} ${yearNum} (${rosterWithOverrides.length} players)`)
           console.log(`[CACHE] Sample players:`, JSON.stringify(samplePlayers, null, 2))
           
-          // Validate that players have required fields
-          const playersWithNames = cachedRoster.filter((p: any) => p?.name)
-          const playersWithHeadshots = cachedRoster.filter((p: any) => p?.headshot)
-          console.log(`[CACHE] Players with names: ${playersWithNames.length}/${cachedRoster.length}, Players with headshots: ${playersWithHeadshots.length}/${cachedRoster.length}`)
+          // Log position distribution after overrides
+          const positionCounts: Record<string, number> = {}
+          rosterWithOverrides.forEach((p: any) => {
+            const pos = p?.position || 'UNKNOWN'
+            positionCounts[pos] = (positionCounts[pos] || 0) + 1
+          })
+          console.log(`[CACHE] Position distribution (after depth chart):`, positionCounts)
+          const defensivePositions = Object.keys(positionCounts).filter(p => ['ILB', 'EDGE', 'IDL', 'CB', 'S', 'DL', 'LB'].includes(p))
+          const offensivePositions = Object.keys(positionCounts).filter(p => ['QB', 'RB', 'WR', 'TE', 'T', 'G', 'C', 'OL'].includes(p))
+          console.log(`[CACHE] Defensive positions in cache:`, defensivePositions)
+          console.log(`[CACHE] Offensive positions in cache:`, offensivePositions)
           
-          return NextResponse.json({
-            count: cachedRoster.length,
-            data: cachedRoster,
-            cached: true,
-            source: 'redis-python'
-          }, {
-            headers: {
-              'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
-            }
-          })
-        } else {
-          // Legacy cache format, still return it but log
-          console.log(`[CACHE] Returning cached roster (legacy format) for ${team} ${yearNum} (${cachedRoster.length} players)`)
-          // Try to add missing fields if they're not present
-          const processedRoster = cachedRoster.map((player: any) => {
-            if (!player.headshot && player.name) {
-              // Try to generate headshot if missing
-              const nameParts = player.name.split(' ')
-              if (nameParts.length >= 2) {
-                player.headshot = generateOUHeadshotUrl(player.name)
+          // Validate that players have required fields
+          const playersWithNames = rosterWithOverrides.filter((p: any) => p?.name && p.name.trim().length > 0)
+          const playersWithHeadshots = rosterWithOverrides.filter((p: any) => p?.headshot && p.headshot.trim().length > 0)
+          console.log(`[CACHE] Players with names: ${playersWithNames.length}/${rosterWithOverrides.length}, Players with headshots: ${playersWithHeadshots.length}/${rosterWithOverrides.length}`)
+          
+          // Filter out players with invalid names before returning
+          const validRoster = rosterWithOverrides.filter((p: any) => p?.name && p.name.trim().length > 0)
+          
+          if (validRoster.length === 0) {
+            console.warn(`[CACHE] No valid players found in cache for ${team} ${yearNum}, will fetch fresh data`)
+            // Don't return invalid data, let it fall through to fetch fresh
+          } else {
+            console.log(`[CACHE] Returning ${validRoster.length} valid players (filtered out ${rosterWithOverrides.length - validRoster.length} invalid)`)
+            return NextResponse.json({
+              count: validRoster.length,
+              data: validRoster,
+              cached: true,
+              source: 'redis-python'
+            }, {
+              headers: {
+                'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
               }
-            }
-            if (!player.role) {
-              player.role = 'Practice Player'
-            }
-            return player
-          })
-          return NextResponse.json({
-            count: processedRoster.length,
-            data: processedRoster,
-            cached: true
-          }, {
-            headers: {
-              'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
-            }
-          })
+            })
+          }
+        } else {
+          // Legacy cache format - apply depth chart overrides and filter invalid names
+          const rosterWithOverrides = applyDepthChartOverrides(cachedRoster as Player[])
+          const validRoster = rosterWithOverrides.filter((p: any) => p?.name && p.name.trim().length > 0)
+          if (validRoster.length > 0) {
+            console.log(`[CACHE] Returning cached roster (legacy format) for ${team} ${yearNum} (${validRoster.length} valid players)`)
+            return NextResponse.json({
+              count: validRoster.length,
+              data: validRoster,
+              cached: true
+            }, {
+              headers: {
+                'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+              }
+            })
+          }
         }
-      } else if (cachedRoster) {
-        // Data exists but isn't in expected format
-        console.warn(`[ROSTER API] Cache data exists but isn't in expected format:`, {
-          type: typeof cachedRoster,
-          isArray: Array.isArray(cachedRoster),
-          keys: typeof cachedRoster === 'object' ? Object.keys(cachedRoster) : []
-        })
       }
     }
 
-    // Cache miss or force refresh - fetch from API
+    // Cache miss, invalid cache, or force refresh - fetch from API
     console.log(`[CACHE MISS] Fetching fresh roster for ${team} ${yearNum}`)
 
     // Detect if we're on Vercel (Python not available in Vercel serverless functions)
@@ -466,6 +552,15 @@ export async function GET(request: NextRequest) {
 
     // Process the roster data (same logic for both Python and HTTP)
     const roster = processRoster(cfbdRoster)
+
+    // Log position distribution for debugging
+    const positionCounts: Record<string, number> = {}
+    roster.forEach(player => {
+      positionCounts[player.position] = (positionCounts[player.position] || 0) + 1
+    })
+    console.log(`[ROSTER] Position distribution:`, positionCounts)
+    console.log(`[ROSTER] Defensive positions found:`, Object.keys(positionCounts).filter(p => ['ILB', 'EDGE', 'IDL', 'CB', 'S', 'DL', 'LB'].includes(p)))
+    console.log(`[ROSTER] Offensive positions found:`, Object.keys(positionCounts).filter(p => ['QB', 'RB', 'WR', 'TE', 'T', 'G', 'C', 'OL'].includes(p)))
 
     console.log(`Successfully processed ${roster.length} players`)
 

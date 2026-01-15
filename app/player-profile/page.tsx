@@ -51,7 +51,7 @@ function PlayerProfileContent() {
   const [activeHPSubTab, setActiveHPSubTab] = useState<HighPerformanceSubTab>('Catapult')
   const [newNote, setNewNote] = useState('')
   const [newNoteAuthor, setNewNoteAuthor] = useState('')
-  const [selectedGameYear, setSelectedGameYear] = useState<number>(new Date().getFullYear())
+  const [selectedGameYear, setSelectedGameYear] = useState<number>(2025)
   const [selectedCatapultMetric, setSelectedCatapultMetric] = useState<string>('playerLoad')
   const [selectedForcePlateMetric, setSelectedForcePlateMetric] = useState<string>('Peak Force')
   const [selectedBodyCompMetric, setSelectedBodyCompMetric] = useState<string>('weight')
@@ -296,18 +296,18 @@ function PlayerProfileContent() {
                 playerData.gameStats = allGameStats
               } else {
                 // Fallback to mock data if no real data available
-                playerData.gameStats = generateMockGameStats(playerData, 2024)
+                playerData.gameStats = generateMockGameStats(playerData, 2025)
               }
             } catch (error) {
               console.error('Error loading game stats:', error)
               // Fallback to mock data on error
               if (!playerData.gameStats) {
-                playerData.gameStats = generateMockGameStats(playerData, 2024)
+                playerData.gameStats = generateMockGameStats(playerData, 2025)
               }
             }
           } else if (playerData && !playerData.gameStats) {
             // Fallback to mock data if player ID not available
-            playerData.gameStats = generateMockGameStats(playerData, 2024)
+            playerData.gameStats = generateMockGameStats(playerData, 2025)
           }
           
           // Generate mock high performance data if not present

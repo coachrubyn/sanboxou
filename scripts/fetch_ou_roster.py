@@ -180,38 +180,62 @@ def get_class_from_year(year: int) -> str:
 
 
 def map_position(cfbd_position: str) -> str:
-    """Map CFBD position to our position format"""
+    """Map CFBD position to our granular position format (matching TypeScript mapToGranularPosition)"""
     if not cfbd_position:
-        return 'OL'
+        return 'T'  # Default to T (tackle) instead of OL
     
-    # Basic position mapping (can be enhanced)
+    position_upper = cfbd_position.upper()
+    
+    # OL positions - map specific positions when CFBD provides them
+    if position_upper in ['OT', 'LT', 'RT']:
+        return 'T'
+    if position_upper in ['OG', 'LG', 'RG']:
+        return 'G'
+    if position_upper == 'C':
+        return 'C'
+    if position_upper == 'OL':
+        # If CFBD only provides 'OL', default to T (can be overridden by depth chart)
+        return 'T'
+    
+    # DL positions - map based on specific position codes
+    if position_upper in ['LDE', 'RDE', 'DE']:
+        return 'EDGE'  # Generic DE maps to EDGE
+    if position_upper in ['DT', 'NT']:
+        return 'IDL'
+    if position_upper == 'DL':
+        # Generic DL - default to IDL (can be overridden by depth chart)
+        return 'IDL'
+    
+    # LB positions
+    if position_upper in ['WLB', 'MLB', 'ILB']:
+        return 'ILB'
+    if position_upper == 'OLB':
+        return 'EDGE'  # OLB often plays edge
+    if position_upper == 'LB':
+        # Generic LB - default to ILB
+        return 'ILB'
+    
+    # Defensive back positions
+    if position_upper in ['LCB', 'RCB', 'CB', 'DB']:
+        return 'CB'  # Generic DB maps to CB
+    if position_upper in ['CHEET', 'SS', 'FS', 'S']:
+        return 'S'
+    
+    # Map other positions
     position_map = {
         'QB': 'QB',
         'RB': 'RB',
         'FB': 'RB',
         'WR': 'WR',
         'TE': 'TE',
-        'OL': 'OL',
-        'C': 'OL',
-        'G': 'OL',
-        'T': 'OL',
-        'DL': 'DL',
-        'DE': 'DL',
-        'DT': 'DL',
-        'NT': 'DL',
-        'LB': 'LB',
-        'ILB': 'LB',
-        'OLB': 'LB',
-        'CB': 'CB',
-        'S': 'S',
-        'FS': 'S',
-        'SS': 'S',
         'K': 'K',
+        'PK': 'K',
         'P': 'P',
+        'PT': 'P',
         'LS': 'LS',
     }
     
-    return position_map.get(cfbd_position.upper(), 'OL')
+    return position_map.get(position_upper, 'T')  # Default to T instead of OL
 
 
 def process_roster(roster_data: list, team: str = "Oklahoma", redis_url: str = None) -> list:
@@ -232,6 +256,11 @@ def process_roster(roster_data: list, team: str = "Oklahoma", redis_url: str = N
         first_name = player.get('firstName', '').strip()
         last_name = player.get('lastName', '').strip()
         player_name = player.get('name', f"{first_name} {last_name}").strip()
+        
+        # Validate that we have a valid name
+        if not player_name or len(player_name) < 2:
+            print(f"[WARNING] Skipping player with invalid name: {player_name} (first: '{first_name}', last: '{last_name}')", file=sys.stderr)
+            continue
         
         # Priority 1: Try to find scraped headshot (most reliable)
         headshot = find_scraped_headshot(player_name, scraped_headshots)
@@ -258,8 +287,8 @@ def process_roster(roster_data: list, team: str = "Oklahoma", redis_url: str = N
         
         processed_players.append(processed_player)
     
-    # Sort by position group, then by number
-    position_order = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K', 'P', 'LS']
+    # Sort by position group, then by number (using granular positions)
+    position_order = ['QB', 'RB', 'WR', 'TE', 'T', 'G', 'C', 'ILB', 'EDGE', 'IDL', 'CB', 'S', 'K', 'P', 'LS']
     
     def sort_key(p):
         pos_idx = position_order.index(p['position']) if p['position'] in position_order else 999
@@ -267,6 +296,18 @@ def process_roster(roster_data: list, team: str = "Oklahoma", redis_url: str = N
         return (pos_idx, number)
     
     processed_players.sort(key=sort_key)
+    
+    # Log position distribution for debugging
+    position_counts = {}
+    for p in processed_players:
+        pos = p['position']
+        position_counts[pos] = position_counts.get(pos, 0) + 1
+    
+    print(f"[PROCESS] Position distribution: {position_counts}", file=sys.stderr)
+    defensive_positions = [p for p in position_counts.keys() if p in ['ILB', 'EDGE', 'IDL', 'CB', 'S', 'DL', 'LB']]
+    offensive_positions = [p for p in position_counts.keys() if p in ['QB', 'RB', 'WR', 'TE', 'T', 'G', 'C', 'OL']]
+    print(f"[PROCESS] Defensive positions found: {defensive_positions}", file=sys.stderr)
+    print(f"[PROCESS] Offensive positions found: {offensive_positions}", file=sys.stderr)
     
     return processed_players
 
@@ -323,12 +364,28 @@ def fetch_ou_roster(api_key: str, year: int = 2024, team: str = "Oklahoma"):
         
         # Convert to list of dictionaries
         raw_roster_data = []
+        players_with_names = 0
+        players_without_names = 0
+        
         for player in roster:
+            first_name = (player.first_name or "").strip()
+            last_name = (player.last_name or "").strip()
+            player_name = f"{first_name} {last_name}".strip()
+            
+            # Validate name
+            if not player_name or len(player_name) < 2:
+                players_without_names += 1
+                print(f"[WARNING] Player with ID {player.id} has invalid name: first='{first_name}', last='{last_name}', combined='{player_name}'", file=sys.stderr)
+                # Skip players without valid names
+                continue
+            else:
+                players_with_names += 1
+            
             player_dict = {
                 "id": player.id,
-                "firstName": player.first_name or "",
-                "lastName": player.last_name or "",
-                "name": f"{player.first_name or ''} {player.last_name or ''}".strip(),
+                "firstName": first_name,
+                "lastName": last_name,
+                "name": player_name,
                 "team": player.team or team,
                 "position": player.position,
                 "jersey": player.jersey,
@@ -340,6 +397,12 @@ def fetch_ou_roster(api_key: str, year: int = 2024, team: str = "Oklahoma"):
                 "homeCountry": player.home_country,
             }
             raw_roster_data.append(player_dict)
+        
+        print(f"[FETCH] Fetched {len(raw_roster_data)} players with valid names (skipped {players_without_names} without names)", file=sys.stderr)
+        
+        if len(raw_roster_data) == 0:
+            print(f"[ERROR] No players with valid names found for {team} {year}", file=sys.stderr)
+            sys.exit(1)
         
         # Get Redis URL for scraped headshots
         redis_url = os.getenv("REDIS_URL")
